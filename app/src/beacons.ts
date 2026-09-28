@@ -50,8 +50,8 @@ import {
   createOutbox,
 } from '@forgesworn/roost-kit'
 import type { OutboxItem, OutboxStore, Rumor, SignedEvent, Signer } from '@forgesworn/roost-kit'
-import { mergePrecision } from '@forgesworn/brood-kit'
-import type { Agreement } from '@forgesworn/brood-kit'
+import { mergePrecision } from './brood/index.js'
+import type { Agreement } from './brood/index.js'
 import { decideEmission } from '@forgesworn/flock/policy'
 import { buildLocationSignal, SIGNAL_TYPES } from '@forgesworn/flock/signals'
 import { haversineMetres } from '@forgesworn/flock/geofence'
@@ -207,7 +207,7 @@ export interface CadenceDecision {
  * `basePrecisionFor` below — 6 in the steady state); `agreement` is the
  * pickup-time agreement active for this circle, if any — its schedule can
  * only RAISE precision above the base, never lower it below what FLOCK's own
- * policy already decided (brood-kit's `mergePrecision`). Pure and
+ * policy already decided (BROOD's `mergePrecision`). Pure and
  * deterministic — `nowSecValue` is passed in, never read from the clock here.
  *
  * `movementMode` (default `'moving'`, so every pre-Task-3 call site/test
@@ -1039,7 +1039,7 @@ export async function decodeBeaconRumor(rumor: Rumor, circleSeedHex: string): Pr
  * against its own vocabulary and no-op otherwise — safety.ts's wire types
  * (`t:'help'` from `@forgesworn/flock/signals`'s `SIGNAL_TYPES`, `t:'buzz'`
  * from `@forgesworn/flock/buzz`'s `BUZZ_SIGNAL_TYPE`, `t:'findreq'` from
- * `@forgesworn/flock/findping`'s `FIND_PING_SIGNAL_TYPE`) and brood-kit's
+ * `@forgesworn/flock/findping`'s `FIND_PING_SIGNAL_TYPE`) and BROOD's
  * `BroodType` are disjoint namespaces (see BROOD.md §2), so there is no
  * dispatch ambiguity between them. Left empty, unknown traffic is silently
  * ignored (same discipline as an unrecognised `t` at any other layer here).

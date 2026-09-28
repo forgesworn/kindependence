@@ -29,7 +29,7 @@
 //      `{updatedAt, by}`, so it's generic enough to reuse unmodified),
 //      carrying the FULL `Place[]` (including geometry redundantly) as
 //      plain JSON on an UNENCRYPTED-BUT-GIFT-WRAPPED kind-20078 rumor —
-//      exactly brood-kit's own `buildBroodInner` pattern (see
+//      exactly BROOD's own `buildBroodInner` pattern (see
 //      agreements.ts's module doc comment for why a second encryption layer
 //      buys nothing against a circle's own members: the outer NIP-59
 //      gift-wrap, keyed off the same shared `seedHex`-derived inbox, is
@@ -168,7 +168,7 @@ import { buildLocationSignal, SIGNAL_TYPES } from '@forgesworn/flock/signals'
 import { buildKindependenceMsgSignal } from './legacy-buzz.js'
 import { encode as encodeGeohash, decode as decodeGeohash } from 'geohash-kit'
 import { deriveBeaconKey, decryptBeacon } from 'canary-kit'
-import type { PolicyAction } from '@forgesworn/brood-kit'
+import type { PolicyAction } from './brood/index.js'
 
 const nowSec = (): number => Math.floor(Date.now() / 1000)
 
@@ -785,11 +785,11 @@ export function shouldSuppressEscalation(lastEscalatedAt: number | undefined, at
 export const LEAVE_AREA_KIND = 'leave-area'
 
 /** The wire envelope this feature's approval-req/resp actually rides.
- *  `ApprovalReq.action` is brood-kit's own closed `PolicyAction` enum —
+ *  `ApprovalReq.action` is BROOD's own closed `PolicyAction` enum —
  *  verified EMPIRICALLY (not merely by reading the `.d.ts`) that its real
  *  parser, `parseApprovalReq`, hard-rejects any `action` outside
  *  `{create-circle, add-member, join-circle, add-contact}`: a literal
- *  `action: 'leave-area'` builds fine locally (brood-kit's builders do no
+ *  `action: 'leave-area'` builds fine locally (BROOD's builders do no
  *  validation) but a receiving device's `parseBroodSignal` returns `null`
  *  for it — the request would silently never reach a guardian's inbox at
  *  all. So the actual encoding choice here has TWO parts: (1) `action`
@@ -797,7 +797,7 @@ export const LEAVE_AREA_KIND = 'leave-area'
  *  (2) `params` (the one genuinely free-form `Record<string,string>` field
  *  `ApprovalReq` carries) holds BOTH `LEAVE_AREA_KIND` as a self-
  *  identifying marker AND every `LeaveAreaParams` field, all as plain
- *  strings — `parseParams` (brood-kit) only requires every VALUE to be a
+ *  strings — `parseParams` (BROOD) only requires every VALUE to be a
  *  string, never restricts KEYS, so this round-trips through the real wire
  *  parser untouched (verified in approvals.test.ts/places.test.ts).
  *
@@ -814,7 +814,7 @@ export const LEAVE_AREA_KIND = 'leave-area'
  *  arbitrarily between the two equally-safe options.
  *
  *  Wire-compat with an OLD client (a kindependence build from before this task,
- *  or any other brood-kit-speaking client): it decodes the request
+ *  or any other BROOD-speaking client): it decodes the request
  *  perfectly fine as a real, structurally-valid `'add-contact'`
  *  `approval-req` — it just has no idea what the extra `params` fields
  *  mean, and renders it as an ordinary (if oddly-labelled) "wants to add a
@@ -1057,7 +1057,7 @@ export function windowAction(w: ArrivalWindow, insideNow: boolean, mark: WindowM
 
 /** The metadata companion payload's own `t` field — a kindependence-only
  *  extension of flock's `t` vocabulary (same "discriminated by a new `t`"
- *  pattern brood-kit's own signals already establish — see agreements.ts's
+ *  pattern BROOD's own signals already establish — see agreements.ts's
  *  module doc comment). Signet identity plan, Task 9: this module's places
  *  metadata is now an identity-signed STRUCTURAL action (`'places'`,
  *  structural.ts's `StructuralAction`), queued for the identity signer

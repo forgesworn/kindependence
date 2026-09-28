@@ -7,7 +7,7 @@
 // access), the wire builders/decoders riding the SAME circle-inbox gift-wrap
 // path every other kindependence payload uses, and the Home/Settings UI.
 //
-// Wire shape: brood-kit's `buildBroodInner`/`parseBroodSignal` — kind 20078,
+// Wire shape: BROOD's `buildBroodInner`/`parseBroodSignal` — kind 20078,
 // content a plain JSON encoding of the signal, gift-wrapped to the circle's
 // shared inbox exactly like agreements.ts's brood signals (no second
 // encryption layer — see that file's module doc comment for why that's the
@@ -34,7 +34,7 @@
 // Safety path: this module is never imported by safety.ts, and never routes
 // help/checkin/pickup — see global-constraints.md ("the safety path is never
 // gated") and BROOD.md §7.1. There is nothing here that COULD gate them;
-// this module only knows about the four `PolicyAction`s brood-kit defines
+// this module only knows about the four `PolicyAction`s BROOD defines
 // (create-circle, add-member, join-circle, add-contact), a disjoint set from
 // FLOCK's safety signal types.
 //
@@ -53,7 +53,7 @@
 //
 // Boundary-exit requests (Phase 5 Task 5, brief §13.4): places.ts's
 // leave-area feature rides this module's approval-req/resp wire (no new
-// wire type — verified empirically that brood-kit's own `parseApprovalReq`
+// wire type — verified empirically that BROOD's own `parseApprovalReq`
 // HARD-REJECTS any `action` outside its closed 4-value `PolicyAction` enum,
 // so a literal `'leave-area'` action can never reach a guardian's device at
 // all; see `LEAVE_AREA_MARKER` below for the encoding this module actually
@@ -96,7 +96,7 @@ import {
   evaluatePolicy,
   latestPolicy,
   BROOD_SIGNAL_KIND,
-} from '@forgesworn/brood-kit'
+} from './brood/index.js'
 import type {
   ApprovalReq,
   ApprovalResp,
@@ -104,7 +104,7 @@ import type {
   FamilyPolicy,
   PolicyAction,
   PolicyVerdict,
-} from '@forgesworn/brood-kit'
+} from './brood/index.js'
 
 const nowSec = (): number => Math.floor(Date.now() / 1000)
 
@@ -150,7 +150,7 @@ const ACTION_LABELS: Record<PolicyAction, string> = {
 
 /** Reserved `ApprovalReq.params` key: marks a request's `params` as NOT
  *  really describing its nominal `action` — a feature needing an
- *  approval-req/resp round trip for something outside brood-kit's closed
+ *  approval-req/resp round trip for something outside BROOD's closed
  *  `PolicyAction` enum borrows an existing action as a wire envelope and
  *  self-identifies via this key instead (`params.kind`, not `action`,
  *  since `params` is the one genuinely free-form `Record<string,string>`
@@ -273,7 +273,7 @@ function resolutionActivityEvent(req: ApprovalReq, resp: ApprovalResp, circleId:
 // network access anywhere in this section.
 // ---------------------------------------------------------------------------
 
-/** Merges an incoming `FamilyPolicy` into the per-circle map via brood-kit's
+/** Merges an incoming `FamilyPolicy` into the per-circle map via BROOD's
  *  own `latestPolicy` (BROOD.md §5's convergence rule: strictly-newer
  *  `updatedAt` wins; an exact-tie `updatedAt` falls to the lexicographically
  *  smaller `by`; an exact echo changes nothing). Returns the SAME map
@@ -287,7 +287,7 @@ export function upsertFamilyPolicy(policies: Record<string, FamilyPolicy>, incom
 }
 
 /** The verdict for `action` under `circleId`'s current policy — a thin,
- *  pure wrapper over brood-kit's `evaluatePolicy` against the per-circle map
+ *  pure wrapper over BROOD's `evaluatePolicy` against the per-circle map
  *  (an absent circle policy, or an absent action within one, both fall
  *  through to `DEFAULT_VERDICT`, exactly as `evaluatePolicy` itself
  *  documents). */
@@ -372,11 +372,11 @@ async function broodWrap(signer: Signer, circle: Circle, signal: BroodSignal, at
 
 /** Decode an already-unwrapped rumor as any brood signal, or null if it
  *  isn't one (wrong kind/`t`) or is malformed. Thin pass-through to
- *  brood-kit's own `parseBroodSignal` — except for a STRUCTURAL delivery
+ *  BROOD's own `parseBroodSignal` — except for a STRUCTURAL delivery
  *  (Signet identity plan, Task 9: `family-policy`/`approval-resp` now ride
  *  identity-signed structural events, beacons.ts's `receiveStructural`),
  *  whose synthesized inner rumor carries the STRUCTURAL event's own kind
- *  (`structural.ts`'s `STATEMENT_KIND`), not brood-kit's `BROOD_SIGNAL_KIND`
+ *  (`structural.ts`'s `STATEMENT_KIND`), not BROOD's `BROOD_SIGNAL_KIND`
  *  — its `tags`/`content` are otherwise identical to a phone-key brood
  *  signal's (the queued payload IS the plain brood-signal JSON, same as
  *  every other structural sender's payload), so only the kind needs
@@ -621,7 +621,7 @@ export function handleIncomingSignal(circle: Circle, rumor: Rumor, t: string, se
       // answering (the sender).
       if (signal.by !== sender.memberPk) return
       // Review fix round 1: `approval-resp` itself carries no `circleId`
-      // (brood-kit's own shape — see `parseApprovalResp`), so authority is
+      // (BROOD's own shape — see `parseApprovalResp`), so authority is
       // bound to the PENDING RECORD's own circle instead, checked BEFORE
       // any mutation: a guardian of circle A answering (genuinely, with
       // their own valid signature) must not have it applied to a same-id

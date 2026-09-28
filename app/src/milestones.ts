@@ -67,7 +67,7 @@ import { currentSession } from './session.js'
 import { precisionTerm } from './mapinfo.js'
 import { isGuardian } from '@forgesworn/covey-kit'
 import type { Circle, CircleMember } from '@forgesworn/covey-kit'
-import type { PolicyAction, PolicyVerdict } from '@forgesworn/brood-kit'
+import type { PolicyAction, PolicyVerdict } from './brood/index.js'
 
 const nowSec = (): number => Math.floor(Date.now() / 1000)
 
@@ -89,7 +89,7 @@ export interface LevelPreset {
  *  built to be tuned by copy/threshold edits, not rework").
  *
  *  `policyVerdicts` maps REAL `PolicyAction` ids (`approvals.POLICY_ACTIONS`
- *  — brood-kit's own closed 4-value enum: `create-circle`/`add-member`/
+ *  — BROOD's own closed 4-value enum: `create-circle`/`add-member`/
  *  `join-circle`/`add-contact`; there is no 5th "leave-area" action here —
  *  that one is local-only, per-guardian-device, and stays whatever
  *  `Persisted.leaveAreaPolicy` already has, untouched by a level apply, see

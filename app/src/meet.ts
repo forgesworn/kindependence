@@ -16,7 +16,7 @@
 //
 // Wire — ONE signal, `t:'kindependence-meet'`, gift-wrapped to the circle's
 // shared inbox exactly like every other kindependence companion payload
-// (unencrypted-but-gift-wrapped kind-20078 rumor, brood-kit's own
+// (unencrypted-but-gift-wrapped kind-20078 rumor, BROOD's own
 // `buildBroodInner` pattern — see places.ts's own module doc comment for why
 // a second encryption layer buys nothing here): full-set-replacement,
 // latest-wins, reusing flock's own `isNewerFenceSet` clock check UNMODIFIED

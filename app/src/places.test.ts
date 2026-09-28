@@ -77,7 +77,7 @@ import { giftUnwrap, rawNip44Decrypt } from '@forgesworn/roost-kit'
 import type { Rumor, SignedEvent } from '@forgesworn/roost-kit'
 import { decryptFences } from '@forgesworn/flock/fences'
 import { decodeLegacyBuzz } from './legacy-buzz.js'
-import { buildApprovalReq, buildApprovalResp, parseBroodSignal } from '@forgesworn/brood-kit'
+import { buildApprovalReq, buildApprovalResp, parseBroodSignal } from './brood/index.js'
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure'
 
 // tick()'s escalation retry (review C1) and arrival-buzz seeding (review I1)
@@ -1741,7 +1741,7 @@ describe('LeaveAreaParams — encode/decode round trip through the REAL Approval
     expect(decodeLeaveAreaParams(wire)).toBeNull()
   })
 
-  it('LEAVE_AREA_ENVELOPE_ACTION + encoded params survive the REAL brood-kit buildApprovalReq -> parseBroodSignal round trip', () => {
+  it('LEAVE_AREA_ENVELOPE_ACTION + encoded params survive the REAL BROOD buildApprovalReq -> parseBroodSignal round trip', () => {
     const params = fakeLeaveParams()
     const req = buildApprovalReq({ id: 'r1', action: LEAVE_AREA_ENVELOPE_ACTION, params: encodeLeaveAreaParams(params), from: 'a'.repeat(64) }, 100)
     const inner = { kind: 20_078, tags: [['t', 'approval-req']], content: JSON.stringify(req) }

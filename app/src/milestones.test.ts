@@ -98,7 +98,7 @@ describe('LEVELS — table shape', () => {
       expect(typeof preset.graceMinutes).toBe('number')
       expect(preset.escalation).toBe('grace')
       expect([4, 6, 7]).toContain(preset.recommendedBaseline)
-      // Every policyVerdicts key is a REAL brood-kit PolicyAction id.
+      // Every policyVerdicts key is a REAL BROOD PolicyAction id.
       for (const action of Object.keys(preset.policyVerdicts)) {
         expect(POLICY_ACTIONS).toContain(action)
       }

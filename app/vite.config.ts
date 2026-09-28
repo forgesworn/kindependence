@@ -1,7 +1,7 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from 'vite'
 
-// kindependence PWA — thin app shell over roost-kit/covey-kit/brood-kit. No
+// kindependence PWA — thin app shell over roost-kit/covey-kit and the local BROOD module. No
 // framework: render-on-state vanilla TS (see src/app.ts), same idiom as
 // flock's app/.
 export default defineConfig({

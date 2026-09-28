@@ -101,7 +101,7 @@ import {
 import type { Circle, CircleMember, Role, DirectMessage } from '@forgesworn/covey-kit'
 import { publishSigned, subscribeGiftWraps, giftWrap, giftUnwrap } from '@forgesworn/roost-kit'
 import type { Signer, SignedEvent, Rumor } from '@forgesworn/roost-kit'
-import type { PolicyAction, PolicyVerdict } from '@forgesworn/brood-kit'
+import type { PolicyAction, PolicyVerdict } from './brood/index.js'
 import { npubEncode, decode as nip19Decode } from 'nostr-tools/nip19'
 import * as formState from './form-state.js'
 
@@ -133,7 +133,7 @@ export function appRelays(p: store.Persisted): string[] {
 }
 
 // ---------------------------------------------------------------------------
-// Child-gating (brood-kit) — a CHILD device consults `circleId`'s current
+// Child-gating (BROOD) — a CHILD device consults `circleId`'s current
 // FamilyPolicy (approvals.ts's `verdictFor`, backed by real synced state)
 // before create-circle/add-member. A GUARDIAN device never calls this at
 // all — every call site below checks `fam.role === 'child'` first. That's

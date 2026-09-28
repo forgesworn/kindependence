@@ -29,8 +29,8 @@ import { makeLocalSigner, deriveInbox, toHex } from '@forgesworn/covey-kit'
 import type { Circle, CircleMember } from '@forgesworn/covey-kit'
 import { giftUnwrap, rawNip44Decrypt, publishSigned } from '@forgesworn/roost-kit'
 import type { Rumor, SignedEvent } from '@forgesworn/roost-kit'
-import { buildApprovalReq, buildApprovalResp, parseBroodSignal } from '@forgesworn/brood-kit'
-import type { ApprovalReq, FamilyPolicy } from '@forgesworn/brood-kit'
+import { buildApprovalReq, buildApprovalResp, parseBroodSignal } from './brood/index.js'
+import type { ApprovalReq, FamilyPolicy } from './brood/index.js'
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure'
 
 // `raiseApproval`/`respondApproval`/`publishFamilyPolicy` do real (non-network)
@@ -837,7 +837,7 @@ describe('raiseApproval / respondApproval / publishFamilyPolicy — wire round t
 
 // ---------------------------------------------------------------------------
 // Phase 5 Task 5 (brief §13.4) — boundary-exit requests. Verifies the params-
-// encoding choice against the REAL brood-kit wire (not a mock of it), the
+// encoding choice against the REAL BROOD wire (not a mock of it), the
 // `PARAMS_KIND_KEY` defense-in-depth guard, and the two registration hooks
 // places.ts relies on for local policy auto-resolution and cross-device
 // convergence.
@@ -847,7 +847,7 @@ function fakeLeaveParams(overrides: Partial<LeaveAreaParams> = {}): LeaveAreaPar
   return { placeName: 'Home', placeId: 'place-1', destination: 'The park', withWho: 'Sam', durationMin: 30, precisionTerm: 'Street', ...overrides }
 }
 
-describe('boundary-exit requests (Phase 5 Task 5, §13.4) — action/params encoding, verified against the REAL brood-kit wire', () => {
+describe('boundary-exit requests (Phase 5 Task 5, §13.4) — action/params encoding, verified against the REAL BROOD wire', () => {
   beforeEach(() => {
     vi.stubGlobal('localStorage', fakeLocalStorage())
     vi.mocked(publishSigned).mockClear()

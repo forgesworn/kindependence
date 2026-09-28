@@ -62,8 +62,8 @@ import {
   buildExtendReq,
   buildExtendResp,
   buildBroodInner,
-} from '@forgesworn/brood-kit'
-import type { Agreement, ExtendResp } from '@forgesworn/brood-kit'
+} from './brood/index.js'
+import type { Agreement, ExtendResp } from './brood/index.js'
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure'
 import { encode as encodeGeohash } from 'geohash-kit'
 import type { Fix } from './geo.js'

@@ -2,7 +2,7 @@
 // requested pickup. The one hard rule (global-constraints.md, "the safety
 // path is never gated"): none of these three flows may depend on approvals,
 // family policy, or connectivity. Structurally enforced, not just by
-// discipline — this file imports NOTHING from `@forgesworn/brood-kit` (the
+// discipline — this file imports NOTHING from `@forgesworn/BROOD` (the
 // package that owns policy/approvals), so there is no code path here that
 // COULD consult one. Offline publishes fail over to beacons.ts's shared
 // outbox instead of being dropped (see `publishOrEnqueue`), flushed on the

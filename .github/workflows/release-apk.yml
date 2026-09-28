@@ -36,7 +36,6 @@ jobs:
             exit 1
           fi
 
-      # Keep checkout's token from overriding the cross-repository read PAT.
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
@@ -52,22 +51,12 @@ jobs:
           java-version: "21"
           cache: gradle
 
-      # brood-kit is currently private. The other pinned kit dependencies are
-      # public. Remove this authentication step once every dependency is
-      # anonymously accessible. npm resolves GitHub Git dependencies over SSH,
-      # so these rewrites use HTTPS with a read-only, cross-repository PAT.
-      - name: Authenticate git for private @forgesworn deps
-        env:
-          FORGESWORN_READ_PAT: ${{ secrets.FORGESWORN_READ_PAT }}
+      # npm can resolve GitHub dependencies over SSH. All kit dependencies
+      # are public, so use anonymous HTTPS; no read PAT or SSH key is needed.
+      - name: Use HTTPS for public Git dependencies
         run: |
-          if [ -z "$FORGESWORN_READ_PAT" ]; then
-            echo "::error::FORGESWORN_READ_PAT is required while brood-kit is private."
-            exit 1
-          fi
-          AUTH="https://x-access-token:${FORGESWORN_READ_PAT}@github.com/"
-          git config --global url."$AUTH".insteadOf "https://github.com/"
-          git config --global --add url."$AUTH".insteadOf "ssh://git@github.com/"
-          git config --global --add url."$AUTH".insteadOf "git@github.com:"
+          git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+          git config --global --add url."https://github.com/".insteadOf "git@github.com:"
 
       - name: Install dependencies
         run: npm ci
@@ -125,9 +114,6 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Remove signing material and git credentials
+      - name: Remove signing material
         if: always()
-        run: |
-          rm -f "$RUNNER_TEMP/kindependence-release.jks" "$RUNNER_TEMP/kindependence-keystore.properties"
-          # The runner is disposable; remove the PAT-bearing URL rewrites too.
-          rm -f "$HOME/.gitconfig"
+        run: rm -f "$RUNNER_TEMP/kindependence-release.jks" "$RUNNER_TEMP/kindependence-keystore.properties"

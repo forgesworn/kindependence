@@ -29,7 +29,7 @@ import type { MeetPoint } from './meet.js'
 import type { PickupRecord } from './pickup.js'
 import type { Pin } from './pins.js'
 import type { Circle } from '@forgesworn/covey-kit'
-import type { Agreement, ApprovalReq, FamilyPolicy, PolicyVerdict } from '@forgesworn/brood-kit'
+import type { Agreement, ApprovalReq, FamilyPolicy, PolicyVerdict } from './brood/index.js'
 import type { SignedEvent } from '@forgesworn/roost-kit'
 import type { TravelMode } from './travel.js'
 import type { SessionInfo } from './session.js'
@@ -261,7 +261,7 @@ export interface AgreementRecord {
   agreement: Agreement
   status: AgreementLifecycleStatus
   /** Set once, the first time an `agreement-status{status:'arrived'}` is
-   *  applied — `isLate` (brood-kit) reads this to know arrival already
+   *  applied — `isLate` (BROOD) reads this to know arrival already
    *  happened, so a late deadline check never fires after the fact. */
   arrivedAt?: number
   pendingExtend?: PendingExtend
@@ -270,7 +270,7 @@ export interface AgreementRecord {
 /** A tracked `approval-req` — this device's own outstanding ask (its
  *  "waiting for a parent" pending state), or one a guardian device has seen
  *  and can act on — plus, once answered, the matching `approval-resp`.
- *  `circleId` is app-level bookkeeping: unlike `Agreement`, brood-kit's own
+ *  `circleId` is app-level bookkeeping: unlike `Agreement`, BROOD's own
  *  `ApprovalReq` carries no `circleId` field (BROOD.md §3 — it's routed
  *  implicitly by whichever circle inbox delivers/receives it, same as any
  *  guardian(s)-directed signal), so this is recorded at the point the
@@ -405,7 +405,7 @@ export interface Persisted {
      *  while a rule's window is active (`beacons.ts`'s
      *  `circleBaselinePrecision`); outside every rule's window, the static
      *  `circleBasePrecision` applies exactly as before this task. An
-     *  agreement's own schedule (brood-kit) can still raise disclosure above
+     *  agreement's own schedule (BROOD) can still raise disclosure above
      *  whichever of the two applies — resolution order stays safety >
      *  agreement > schedule-or-static-baseline (see beacons.ts's
      *  `basePrecisionFor` doc comment for the full picture). */
@@ -586,9 +586,9 @@ export interface Persisted {
   approvedLeaves: Record<string, Array<{ placeId: string; until: number }>>
   /** Phase 5 Task 5 (brief §13.4/§22.3-22.4): a guardian's per-circle
    *  Allow/Prompt/Deny verdict for boundary-exit ("leave-area") requests —
-   *  same three-value `PolicyVerdict` brood-kit's real `family-policy`
+   *  same three-value `PolicyVerdict` BROOD's real `family-policy`
    *  wire signal uses for the other four `PolicyAction`s, but this field
-   *  itself is LOCAL-ONLY and NEVER rides that wire signal: brood-kit's
+   *  itself is LOCAL-ONLY and NEVER rides that wire signal: BROOD's
    *  `PolicyAction` is a closed 4-value enum, hard-enforced at PARSE time
    *  (verified empirically, see approvals.test.ts) — a `rules` map
    *  containing a 5th key doesn't just fail to add the key, it makes
@@ -601,7 +601,7 @@ export interface Persisted {
    *  here — same "local-only by design this phase" scope every other
    *  Phase 5 setting shares, brief §32's cross-cutting note). A circle
    *  absent here defaults to `'prompt'`, same `DEFAULT_VERDICT` fallback
-   *  brood-kit's own `evaluatePolicy` uses. Consulted only on RECEIPT of a
+   *  BROOD's own `evaluatePolicy` uses. Consulted only on RECEIPT of a
    *  leave-area request (approvals.ts's registered auto-resolver), never by
    *  the requester pre-emptively — the requester's device has no way to
    *  know this device's local setting in advance. Owned by approvals.ts. */

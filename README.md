@@ -19,8 +19,9 @@ shared and what isn't. Identity is managed by **My Signet**, using an external
 signer over NIP-55 on Android or NIP-46 for QR/bunker connections. This app
 creates a separate device key; it does not hold the family's identity keys.
 
-The app itself is deliberately thin: almost everything that isn't UI lives in
-a pure, MIT-licensed TypeScript library, usable outside Kindependence too. On top
+The app itself is deliberately thin: reusable transport and circle primitives
+live in MIT-licensed TypeScript libraries. Its family-logistics rules live in
+the pure [BROOD module](app/src/brood/README.md) inside this repository. On top
 of the FLOCK-compatible circle-of-trust layer, Kindependence adds **BROOD** — a
 new, open family-logistics protocol (agreements, approvals, family policy)
 that rides FLOCK's own transport unmodified; flock clients that don't know
@@ -337,8 +338,9 @@ doesn't reject them or show an error.
 
 ## Repository map
 
-The protocol libraries have their own repositories and are pinned here to
-immutable commits. `app/` is the PWA that consumes them. The libraries have no
+Transport and circle libraries have their own repositories and are pinned
+here to immutable commits. BROOD lives under `app/src/brood/`. `app/` is the
+PWA that consumes these modules. The pure modules have no
 DOM, `localStorage`, `console.*`, or baked-in relay defaults; the app injects
 those concerns.
 
@@ -346,7 +348,7 @@ those concerns.
 |---|---|
 | [`forgesworn/roost-kit`](https://github.com/forgesworn/roost-kit) | Transport: signer types, NIP-59 gift wrap, relay publish/subscribe, key rotation, and an offline outbox. The wire-level foundation everything else sits on. |
 | [`forgesworn/covey-kit`](https://github.com/forgesworn/covey-kit) | Circles: keys, a local in-memory signer, personal-inbox payloads, word-code invites, roles, and latest-wins config merge. Depends on Roost. |
-| [`forgesworn/brood-kit`](https://github.com/forgesworn/brood-kit) | The BROOD family protocol: agreements, family policy, and approvals as pure payload builders, strict parsers, and policy helpers. |
+| [`app/src/brood/`](app/src/brood) | The local BROOD family protocol: agreements, family policy, approvals and schedule-driven disclosure. Its [wire specification](docs/BROOD.md) and tests live here. |
 | [`app/`](app) | The Kindependence PWA (and Capacitor Android shell): onboarding/identity, circles, map, beacons, safety, safe areas, agreements, approvals, messaging, the Activity timeline, native notifications/background location, and the companion-rail contacts consumer. |
 
 Every package is MIT licensed, matching the root [`LICENSE`](LICENSE).
@@ -358,8 +360,8 @@ Keystore for device secrets. Browser builds currently store device secrets in
 plain localStorage and are intended for development and testing. Use test
 identities and locations for browser demos.
 
-An anonymous source build is currently blocked by the private `brood-kit`
-dependency. See [dependency access](#dependency-access) before installing.
+All external kit dependencies are public. See
+[dependency access](#dependency-access) for installing without SSH credentials.
 Signed Android distribution also requires an off-repository release key; see
 [release signing](app/android/RELEASE_SIGNING.md).
 
@@ -479,12 +481,21 @@ full procedure; nothing there is needed for `assembleDebug`/local testing.
 
 ## Dependency access
 
-The app pins `@forgesworn/flock`, `roost-kit`, `covey-kit`, `brood-kit` and
-`signet-contacts` to immutable Git commits. The first, second, third and fifth
-repositories are public; `brood-kit` is private as of this review. Installing
-requires access to that repository until it is made public or released as an
-accessible package. The lockfile resolves Git dependencies over SSH, so an
-SSH key with the appropriate GitHub access is currently needed.
+The app pins `@forgesworn/flock`, `roost-kit`, `covey-kit` and
+`signet-contacts` to immutable commits in public Git repositories. BROOD is a
+local module, so installing does not require access to its former repository.
+
+npm may resolve GitHub dependencies over SSH. To install without an SSH key,
+use anonymous HTTPS for GitHub Git fetches:
+
+```bash
+git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+git config --global --add url."https://github.com/".insteadOf "git@github.com:"
+npm ci
+```
+
+These rules affect GitHub Git fetches globally. If your GitHub SSH access is
+already configured, the normal quickstart works without adding them.
 
 `signet-login` is a checked-in MIT-licensed SDK snapshot with local fixes;
 its provenance and replacement instructions are in [vendor/README.md](vendor/README.md).

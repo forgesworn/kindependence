@@ -15,10 +15,10 @@
 //                   over the personal inbox)
 //   rekey           circles.ts removeMemberFromCircle, wire t: 'reseed'
 //   invite          circles.ts doInvite, wire t: 'invite' (same string)
-//   family-policy   approvals.ts publishFamilyPolicy, wire t: 'family-policy' (brood-kit)
-//   approval-resp   approvals.ts respondApproval, wire t: 'approval-resp' (brood-kit)
-//   agreement       agreements.ts proposeAgreement, wire t: 'agreement' (brood-kit)
-//   extend-resp     agreements.ts respondExtend, wire t: 'extend-resp' (brood-kit)
+//   family-policy   approvals.ts publishFamilyPolicy, wire t: 'family-policy' (BROOD)
+//   approval-resp   approvals.ts respondApproval, wire t: 'approval-resp' (BROOD)
+//   agreement       agreements.ts proposeAgreement, wire t: 'agreement' (BROOD)
+//   extend-resp     agreements.ts respondExtend, wire t: 'extend-resp' (BROOD)
 //   places          places.ts savePlaces, wire t: 'places' (PLACES_SIGNAL_TYPE — Task 9
 //                   moved this action's own migrator target VALUE from the
 //                   legacy phone-signed 'kindependence-places' to 'places'; see

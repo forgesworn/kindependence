@@ -8,12 +8,12 @@
 // over the SAME circle-inbox gift-wrap path every other kindependence payload
 // uses, and the Home-tab UI.
 //
-// Wire shape: brood-kit's `buildBroodInner`/`parseBroodSignal` — kind 20078
+// Wire shape: BROOD's `buildBroodInner`/`parseBroodSignal` — kind 20078
 // (the same inner kind FLOCK's own signals use, discriminated by the same
 // `['t', <type>]` tag convention), content a plain JSON encoding of the
 // signal. Unlike FLOCK's own signals (canary-kit AES-GCM keyed off the
 // circle seed), a brood signal carries NO second encryption layer — see
-// BROOD.md §2: "brood-kit itself never touches the wire... the caller is
+// BROOD.md §2: "BROOD itself never touches the wire... the caller is
 // responsible for gift-wrapping it." The outer NIP-59 gift-wrap (roost-kit's
 // `giftWrap`, byte-identical to FLOCK's own wrap) is brood's only
 // confidentiality layer, exactly the precedent safety.ts's own
@@ -69,7 +69,7 @@ import {
   parseBroodSignal,
   isLate,
   BROOD_SIGNAL_KIND,
-} from '@forgesworn/brood-kit'
+} from './brood/index.js'
 import type {
   Agreement,
   AgreementAck,
@@ -78,7 +78,7 @@ import type {
   ExtendReq,
   ExtendResp,
   PrecisionStep,
-} from '@forgesworn/brood-kit'
+} from './brood/index.js'
 import { encode as encodeGeohash, contains as geohashContains, decode as decodeGeohash } from 'geohash-kit'
 import type { Fix } from './geo.js'
 import * as travel from './travel.js'
@@ -272,7 +272,7 @@ export function hasArrivedAt(place: { label: string; geohash?: string } | undefi
  *  two-step schedule, or "Neighbourhood until 17:45, then Precise from
  *  17:45." for this app's single-step `DEFAULT_SCHEDULE`. `baselineTerm` is
  *  the per-circle baseline's own friendly term (`mapinfo.precisionTerm`) —
- *  the schedule only ever raises disclosure ABOVE it (brood-kit's
+ *  the schedule only ever raises disclosure ABOVE it (BROOD's
  *  `agreementPrecision`/`mergePrecision`), so it's always the sentence's
  *  starting state. Steps are walked earliest-first (sorted by
  *  `fromOffsetMin`, same ordering `agreementPrecision` itself uses); the
@@ -480,11 +480,11 @@ export async function buildExtendReqWrap(signer: Signer, circle: Circle, req: Ex
 /** Decode an already-unwrapped rumor as any brood signal, or null if it
  *  isn't one (wrong kind/`t`) or is malformed. Thin pass-through to brood-
  *  kit's own `parseBroodSignal` — kept here so callers (this file, its
- *  tests) don't need to reach into brood-kit's `BROOD_SIGNAL_KIND` shape
+ *  tests) don't need to reach into BROOD's `BROOD_SIGNAL_KIND` shape
  *  themselves. */
 /** See approvals.ts's identical `decodeBroodSignal` doc comment: a
  *  STRUCTURAL delivery (`agreement`/`extend-resp`, Signet identity plan,
- *  Task 9) carries the structural event's own kind, not brood-kit's
+ *  Task 9) carries the structural event's own kind, not BROOD's
  *  `BROOD_SIGNAL_KIND` — only the kind needs correcting. */
 export function decodeBroodSignal(rumor: Rumor, sender: beacons.Sender): ReturnType<typeof parseBroodSignal> {
   const kind = sender.structural ? BROOD_SIGNAL_KIND : rumor.kind
@@ -1035,7 +1035,7 @@ export function handleIncomingSignal(circle: Circle, rumor: Rumor, t: string, se
       // belt-and-braces re-check as `agreement` above.
       if (!sender.structural) return
       // Review fix round 1: `extend-resp` itself carries no `circleId`
-      // (brood-kit's own shape — see `parseExtendResp`), so authority is
+      // (BROOD's own shape — see `parseExtendResp`), so authority is
       // bound to the TRACKED AGREEMENT's own circle instead, checked before
       // any mutation — same "record's circle, not the arrival inbox alone"
       // discipline as approvals.ts's own `approval-resp` binding.
