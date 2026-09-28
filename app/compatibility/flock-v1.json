@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "eb96ce0c4e0b65cdaa42bdc4b47c81c9a92e4dae",
+  "geofence": [
+    {
+      "name": "exact point inside circular safe zone",
+      "point": { "lat": 51.5074, "lon": -0.1278 },
+      "accuracyMetres": 0,
+      "fences": [{ "kind": "circle", "centre": { "lat": 51.5074, "lon": -0.1278 }, "radiusMetres": 100 }],
+      "expected": "inside"
+    },
+    {
+      "name": "uncertainty overlaps circular boundary",
+      "point": { "lat": 51.50825, "lon": -0.1278 },
+      "accuracyMetres": 20,
+      "fences": [{ "kind": "circle", "centre": { "lat": 51.5074, "lon": -0.1278 }, "radiusMetres": 100 }],
+      "expected": "uncertain"
+    },
+    {
+      "name": "point confidently outside every safe zone",
+      "point": { "lat": 48.8566, "lon": 2.3522 },
+      "accuracyMetres": 5,
+      "fences": [{ "kind": "circle", "centre": { "lat": 51.5074, "lon": -0.1278 }, "radiusMetres": 100 }],
+      "expected": "outside"
+    }
+  ],
+  "policy": [
+    {
+      "name": "family withholds inside safe zone",
+      "context": {
+        "mode": "family",
+        "position": { "lat": 51.5074, "lon": -0.1278 },
+        "geofences": [{ "kind": "circle", "centre": { "lat": 51.5074, "lon": -0.1278 }, "radiusMetres": 100 }]
+      },
+      "expected": { "action": "withhold", "precision": 0, "reason": "none" }
+    },
+    {
+      "name": "family discloses a confident breach",
+      "context": {
+        "mode": "family",
+        "position": { "lat": 48.8566, "lon": 2.3522 },
+        "accuracyMetres": 5,
+        "geofences": [{ "kind": "circle", "centre": { "lat": 51.5074, "lon": -0.1278 }, "radiusMetres": 100 }]
+      },
+      "expected": { "action": "full", "precision": 9, "reason": "breach" }
+    },
+    {
+      "name": "help outranks off-grid automatic suppression",
+      "context": {
+        "mode": "nightout",
+        "position": { "lat": 51.5074, "lon": -0.1278 },
+        "offGrid": true,
+        "trigger": "help"
+      },
+      "expected": { "action": "full", "precision": 11, "reason": "help" }
+    }
+  ],
+  "signals": {
+    "reasonMap": {
+      "nightout": "beacon",
+      "breach": "breach",
+      "pickup": "pickup",
+      "help": "help",
+      "none": null
+    },
+    "location": {
+      "params": {
+        "groupId": "flock-vector",
+        "seedHex": "0000000000000000000000000000000000000000000000000000000000000001",
+        "signalType": "breach",
+        "geohash": "gcpuuz",
+        "precision": 9
+      },
+      "expectedEvent": { "kind": 20078, "signalType": "breach" },
+      "expectedPayload": { "geohash": "gcpuuz", "precision": 9 }
+    },
+    "help": {
+      "params": {
+        "groupId": "flock-vector",
+        "seedHex": "0000000000000000000000000000000000000000000000000000000000000001",
+        "member": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "location": { "geohash": "gcpuuz", "precision": 11, "locationSource": "beacon" },
+        "scope": "master",
+        "originGroupId": "origin-vector"
+      },
+      "expectedEvent": { "kind": 20078, "signalType": "help" },
+      "expectedPayload": {
+        "type": "duress",
+        "member": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "geohash": "gcpuuz",
+        "locationSource": "beacon",
+        "scope": "master",
+        "originGroupId": "origin-vector"
+      }
+    }
+  },
+  "buzz": {
+    "params": {
+      "groupId": "flock-vector",
+      "seedHex": "0000000000000000000000000000000000000000000000000000000000000001",
+      "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "action": "check_in",
+      "timestamp": 1700000000
+    },
+    "expectedEvent": { "kind": 20078, "signalType": "buzz" },
+    "expectedPayload": {
+      "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "action": "check_in",
+      "reason": "Check in",
+      "timestamp": 1700000000,
+      "ask": "location"
+    }
+  },
+  "findping": {
+    "params": {
+      "groupId": "flock-vector",
+      "seedHex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "from": "1111111111111111111111111111111111111111111111111111111111111111",
+      "target": "2222222222222222222222222222222222222222222222222222222222222222",
+      "timestamp": 1700000001
+    },
+    "expectedEvent": { "kind": 20078, "signalType": "findreq" },
+    "expectedPayload": {
+      "from": "1111111111111111111111111111111111111111111111111111111111111111",
+      "target": "2222222222222222222222222222222222222222222222222222222222222222",
+      "timestamp": 1700000001
+    }
+  },
+  "joined": {
+    "params": {
+      "groupId": "flock-vector",
+      "seedHex": "0000000000000000000000000000000000000000000000000000000000000001",
+      "member": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "timestamp": 1700000002,
+      "handle": "  Dave  "
+    },
+    "expectedEvent": { "kind": 20078, "signalType": "joined" },
+    "expectedPayload": {
+      "member": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "timestamp": 1700000002,
+      "handle": "Dave"
+    }
+  },
+  "noreport": [
+    {
+      "name": "withhold is strictest overlapping policy",
+      "point": { "lat": 51.5074, "lon": -0.1278 },
+      "accuracyMetres": 0,
+      "zones": [
+        { "area": { "kind": "circle", "centre": { "lat": 51.5074, "lon": -0.1278 }, "radiusMetres": 200 }, "policy": "coarse" },
+        { "area": { "kind": "circle", "centre": { "lat": 51.5074, "lon": -0.1278 }, "radiusMetres": 100 }, "policy": "withhold" }
+      ],
+      "expected": "withhold"
+    },
+    {
+      "name": "uncertain boundary applies fail-safe cap",
+      "point": { "lat": 51.50825, "lon": -0.1278 },
+      "accuracyMetres": 20,
+      "zones": [{ "area": { "kind": "circle", "centre": { "lat": 51.5074, "lon": -0.1278 }, "radiusMetres": 100 }, "policy": "coarse" }],
+      "expected": "coarse"
+    },
+    {
+      "name": "confidently outside has no cap",
+      "point": { "lat": 48.8566, "lon": 2.3522 },
+      "accuracyMetres": 5,
+      "zones": [{ "area": { "kind": "circle", "centre": { "lat": 51.5074, "lon": -0.1278 }, "radiusMetres": 100 } }],
+      "expected": null
+    }
+  ]
+}

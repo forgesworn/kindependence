@@ -1,0 +1,214 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "repo": "forgesworn/flock",
+    "path": "app/src/pin.ts",
+    "commit": "36c22677d5be4580a3a8b632913e562a21c19115"
+  },
+  "notes": [
+    "Vectors were produced by running flock's own app/src/pin.ts (copied verbatim, unmodified) against kindependence's installed canary-kit — not by running kindependence's app/src/pins.ts.",
+    "Kindependence's pins.ts is a hand mirror of flock's pin.ts as of d569b17 (tombstone/anti-resurrection form) + a6a52d7 (18-kind vocabulary).",
+    "Flock's pin.ts has since gained 6bea625 (pin durability anti-entropy), which added ONE new export to pin.ts itself: authoredPins(list, pk) — a pure selection helper (pins whose latest held state a given pubkey authored, tombstones included). Everything else in pin.ts (vocabulary, buildPinSignal, decryptPin, withPin) is unchanged since d569b17/a6a52d7.",
+    "Flock's own withPin has no live-pin cap. Kindependence's applyPin/PIN_CAP is a kindependence-only local addition on top of withPin's merge and is intentionally NOT exercised here (see flock-pin-vectors.test.ts)."
+  ],
+  "kindVocabulary": {
+    "order": [
+      "meet", "car", "parking", "home", "food", "drink", "coffee", "water",
+      "toilet", "picnic", "tent", "view", "shop", "atm", "firstaid", "kids", "pet", "avoid"
+    ],
+    "kinds": {
+      "meet": { "label": "Meet here", "glyph": "📍" },
+      "car": { "label": "Car", "glyph": "🚗" },
+      "parking": { "label": "Parking", "glyph": "🅿️" },
+      "home": { "label": "Home", "glyph": "🏠" },
+      "food": { "label": "Food", "glyph": "🍽️" },
+      "drink": { "label": "Drinks", "glyph": "🍺" },
+      "coffee": { "label": "Coffee", "glyph": "☕" },
+      "water": { "label": "Water", "glyph": "🚰" },
+      "toilet": { "label": "Toilets", "glyph": "🚻" },
+      "picnic": { "label": "Picnic", "glyph": "🧺" },
+      "tent": { "label": "Camp", "glyph": "⛺" },
+      "view": { "label": "Photo spot", "glyph": "📸" },
+      "shop": { "label": "Shop", "glyph": "🛍️" },
+      "atm": { "label": "Cash", "glyph": "🏧" },
+      "firstaid": { "label": "First aid", "glyph": "⛑️" },
+      "kids": { "label": "Kids", "glyph": "🧒" },
+      "pet": { "label": "Pet", "glyph": "🐾" },
+      "avoid": { "label": "Avoid", "glyph": "⚠️" }
+    }
+  },
+  "signal": {
+    "drop": {
+      "params": {
+        "groupId": "gggggggggggggggg",
+        "seedHex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "id": "deadbeefcafef00d",
+        "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "kind": "car",
+        "geohash": "u0edj70gs",
+        "precision": 9,
+        "timestamp": 1700000000
+      },
+      "expectedEvent": { "kind": 20078, "signalType": "pin" },
+      "content": "FAU6+U8p94E0qfTcnzjlMpAg2++WZfnTgEd+QHdrZ1aL9JGUxVtey7jVEfYpVXjDhElXnhlAB50TA0HJVZLkrhVb8Icky1cfjHwmGkOk0H2Mf7OZt2ZWuH3GShry/YjdwYCM/vlMfOuzsBs7DNk21hAK/cSaMsfwQuH12UDzJRtlRbfHr5IO0mZj9v++pnFNWnRH8Ngq/y/tNuwklUF5FWZ1U6oyClyj2CxJsTqWx5wJnTi6qDIBSeccDzdfovebupMbzE6SeA==",
+      "expectedDecoded": {
+        "id": "deadbeefcafef00d",
+        "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "kind": "car",
+        "geohash": "u0edj70gs",
+        "precision": 9,
+        "timestamp": 1700000000
+      }
+    },
+    "tombstone": {
+      "params": {
+        "groupId": "gggggggggggggggg",
+        "seedHex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "id": "deadbeefcafef00d",
+        "from": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "kind": "car",
+        "geohash": "u0edj70gs",
+        "precision": 9,
+        "timestamp": 1700000500,
+        "removed": true
+      },
+      "expectedEvent": { "kind": 20078, "signalType": "pin" },
+      "content": "3A2FIbo0qvVN5DBVT4rS8IJ8/XqVAUhGT8ViszUW9nZKwFoPT9GCNdW0PZ583I/hQHnQOwhMiZ77jbQaKrONeU8XorWtPa6AO/lOhHrKAG/dGupmjybXgaGae8wZdVv75Lz6O1sLsqBBNWgtPTdE+buxGB/WP1fBl2Ukd6FYSS5Ae7YhcOdkh795ZH9h58I6Ydl3xDSrWbO7c3RHdiAc27kJO3vVwVvMY2xObYdCBUbFOb2Op41g3+yrA1Z/oa/eGU7gM964WenDJJ8yWJexjDGzPf6Fmw==",
+      "expectedDecoded": {
+        "id": "deadbeefcafef00d",
+        "from": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "kind": "car",
+        "geohash": "u0edj70gs",
+        "precision": 9,
+        "timestamp": 1700000500,
+        "removed": true
+      }
+    }
+  },
+  "decrypt": {
+    "seedHex": "1111111111111111111111111111111111111111111111111111111111111111",
+    "kindRoundTrip": [
+      { "kind": "meet", "content": "PryC7bbOad5q51cWPWnpg2pTrM2Bpm9VNpZYcY9hcqBxhY4zxAZ9lksaiqPYw3W+aO3MNVCUrv+wZW6uJ0rYuFixfIpXYhfBlKv2owykVwWM3hNWD+2LyTSvb1JSRi/iJP7H0UsHB6Ek+P17Gk5wwW8DxZQXsvT+07AI8Z0ADoJ6DAyn69J9NHgYwEE33YJbiXi1Cv7XCHAZCibox+oBo/cp9sga3cjGzBHfHbnADST2WvGmNUm0IQTdOZE5+IzjrkITu+Dudks=", "expected": { "id": "deadbeefcafef00d", "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "meet", "geohash": "u0edj70gs", "precision": 9, "timestamp": 1700001000 } },
+      { "kind": "car", "content": "llgZAzJj6oBFC+0VgGGkgQ0XTtG8ESy2sRCx/50hp6GVcAvc7Gtudjran503zzYG4fid9GOB9w53+AAu3G/CtjNKKWPKLDwUt1wsyNiyRGfP3+lktUGR6NJaXGx5k+hPu+rTx4E8/nVl7QM/PZYkqfnA8GseomE+9OdD2NJvfhsm3XsZkm9o8YdvA7RJ1vFuybr42YHFsZmii9UY4fEBOG5S/Iyhkucoe8fhd6mpGCCLQTN+uvy+MoF321k6DLMdHWlJW1krgA==", "expected": { "id": "deadbeefcafef00d", "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "car", "geohash": "u0edj70gs", "precision": 9, "timestamp": 1700001001 } },
+      { "kind": "parking", "content": "f6QBv9AHVhJ+PNuex4XUVHDKi3i/5qsYv0Pgu6/FvLzbZRwE4lNXzCEgN22UDwexorsODj2wok0kqbDjsfp9KG+RfFO9EaYC68CbCAdqXaEnvjP6FtNc6GpH74CStU7pKcVOlFBQXXBYKma336Q3dU/oLSM/Q4M4djEmQ5E4qq0y6NEIoXhORI7g09frNvjBDWpfJkSm8st9BHjkDaSMZEkrLV+ZYGuMjkSUrie5sEDsezBKjLwXVdPaISWJUnYksZzn8elQQib1k2o=", "expected": { "id": "deadbeefcafef00d", "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "parking", "geohash": "u0edj70gs", "precision": 9, "timestamp": 1700001002 } },
+      { "kind": "home", "content": "0jXS4XRegOx+4q3vk+D1ecHUqWHtt/4pkNaMpPRQD7FWjblpvJpTVq/Bykdx2Ej8obXwhx2UrwJxyeIJ9AGJZm/Mpvyblp8XMP1jDTd92T4D1aQbGfxzOekvj9L9L2CkjTQ7ZfpM/9Cho202YFKLVKmQ09u2VtL7mav0aCH9f1+BcwFTGwjHOLmBGlkL3fLjgFBuoBQnuX6iD1m3juUd8ssDp+q2DryZWgFXGX1oAs8CVn3X15MiI4b1QmwIUJkvQxYAR2bkyUg=", "expected": { "id": "deadbeefcafef00d", "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "home", "geohash": "u0edj70gs", "precision": 9, "timestamp": 1700001003 } },
+      { "kind": "food", "content": "MjyXOrE0lXY8F85fuSVXK8lyJGEEE768X//SA3mr2Qj6uh4m3oUjIBoKCvSC+2AP+YlouOUxadr+W0LLQQFyHAddYC9HGFmSaNufVrMO84NelDqp3wYJS6UShbjmWficSdacJnf4UJQOAviVxNTzgpQLpw+ldIVwx2cf5T/SUNlI8zz2rlxwULkUVi0hyTyxW/Fcnj5G0skmHAytICnYc5+tNK3uJVAYRC+LFKl3VXuTH02zd5+PURJO2rLE2OIFbKEZdhmg9xE=", "expected": { "id": "deadbeefcafef00d", "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "food", "geohash": "u0edj70gs", "precision": 9, "timestamp": 1700001004 } },
+      { "kind": "drink", "content": "QuneTTMH7/G65cXJeT7QPpAz2+dCJ7zjcXfJbbCUKBUNGb7G5oGsWaUmzzShBQtLTIzUEOdybQmad+EVGd5+YmovyxaNIQxont5LcMx/Mb2Pu6YEB8Ohn4bXtW4ugqTZfd/vxsvtkeSwuZPUBzVJxjytfCceDAN+PjuSNR+FokiA7qRlDBDIxQjrHhIo7cibataCo/FRTrx3cGkPnSq1LqgdAWuUPPCcRfSSsbWRrA7iSWv9NZQ/vmCnoF/6FnkpwvIow/g41gTt", "expected": { "id": "deadbeefcafef00d", "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "drink", "geohash": "u0edj70gs", "precision": 9, "timestamp": 1700001005 } },
+      { "kind": "coffee", "content": "dxWfY2ruLbsdPBAz2iWYoFMSchFYGsCXlKYDFK6oRvNlUm6yqoMALjlKWGNUOoi5b9w5JzRaeAT729V+Ff0ol+2+8SpSLo+ZkNabEKjzyESvvtAtvs5ShZ3nVw+Uo7zy3m1lhY20o/7prN+SbmvrUmtsFtcGhSSeqrjLokwMrFXRNiyOM1qdDBCy5Yct99M+lE0LJs8YTi4Z0kzkotzXTbnALEutef7dbekd27NRB7/2ZOYbY4rz8jD+Ips/3iMU4AUZS2iJxEyb3Q==", "expected": { "id": "deadbeefcafef00d", "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "coffee", "geohash": "u0edj70gs", "precision": 9, "timestamp": 1700001006 } },
+      { "kind": "water", "content": "CrIeSpSNe/DICsHxHHMZG7hkcS5IsXZZ2MibvG2P8l45ZsEsh6rPGy+LVINbgpRFXcP5FqD11JVt2HW+Palh7mPMTH8tZh7kkLrwJWdS8W7aESPmqmg1Wi9YOZNnUqyitD5AVZrky8A5uvxDRshYIdi0LzgpWfrGjX2vXoDq6Ah1snTdvwgE5O2TD8JQOh3urXqp42tnZNTXiLcng06zF4YGPvfx/u6aLG3g958G3Cgz9NKY9c6tx54KO9p+ecZcSGKh95kPLUw2", "expected": { "id": "deadbeefcafef00d", "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "water", "geohash": "u0edj70gs", "precision": 9, "timestamp": 1700001007 } },
+      { "kind": "toilet", "content": "WbzkfPO4+xjMgN5nLEuaLsEM/qBtOUg3X+83RENPhejtngHF9N2AKmZYkCOvSYVJzkKb1R0jFUb68ELe8WnArXRiEAYDAkXcKZ/RjGKkPQPf3rPBovwqpTqwkSBb+TKRuTdAglpI3VQs9keJKZZHnwNZYttNCJ6/og7HYnQYkRaHX7vNY4kG5iMpiDZOQieez7oYT/fp/R3XRnhmx7JfIvqasD8jId1JXFmLSPXj+0iiZ8dnv9wvUmiBetmPQUEuYTIHuDHkYdXrRQ==", "expected": { "id": "deadbeefcafef00d", "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "toilet", "geohash": "u0edj70gs", "precision": 9, "timestamp": 1700001008 } },
+      { "kind": "picnic", "content": "1Vceh30cx+9muG3AtauNgBqu2DGgJOayFB1X3+lfjt5Pi3Dexk/HZMKGlGdHD9t5JjZ0xmNsTYtag6B/NEHhRt+oueb/tEu67msultkvqLjBDolInO/QIueYHH/N7Su3b2C5ClI3Affp2rR9OM7oRoc+UejreT6zeDeGh59fRJG5pfz2gqJ7DBFnlTOvafCXLIdLyYzxUNbngs9pla2uBiHpp+uj5duJ0NjQamSh2LqZsXSZLqAMtqIQ8UnmaLx3oYrrLpAAy4HNTw==", "expected": { "id": "deadbeefcafef00d", "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "picnic", "geohash": "u0edj70gs", "precision": 9, "timestamp": 1700001009 } },
+      { "kind": "tent", "content": "S+Qc8In0FduQwIiRdmzc9/iY3AoYPkX/t+wMx3lfKoSPwFcU5PhgBwJlE+X0VYov2uloBZ+xOpPHlUeD+SAcyT2+nXZ4dXMYkTmyeRK5yzOdapM4D44F6+uZn54kekc8y53HdJi1O3Wr52lbVQN4ZOkS6/oLiUEkk8R4p2JFZV3y3OKpobHTMzI+/oCumvRfjmyq5ShtAoK7zJADfcuoi9C312sW5brYzcXTSFLgZxrqUCjYupakXtrvBfEPtRjiGkS7pZBnyeo=", "expected": { "id": "deadbeefcafef00d", "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "tent", "geohash": "u0edj70gs", "precision": 9, "timestamp": 1700001010 } },
+      { "kind": "view", "content": "4M3bTEPcVDs2wFPeRi0BJt59Gn09p0No99q+wCGO4nRu65bkGhVxxNgToEGpkXzSAkrKWD+r3qxp7RniKJIrthsc+x1EJ9za+EwjXaq037qNv+AtsILkaKD+h/HIsgNTpEOD6GkFIiFl04Lf0ixnv/5+PBwu6aq8iFXWD5PWV3S3qAqicAtV9yHReln0ilEIpZduIQNhjJqM5GiwxC8hmpb4Kt4ehTo7SdiF4Ys38TNHw6a+9+/LQg/Z5mM6hi4Z5Taqzwhzo+w=", "expected": { "id": "deadbeefcafef00d", "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "view", "geohash": "u0edj70gs", "precision": 9, "timestamp": 1700001011 } },
+      { "kind": "shop", "content": "p5ELsAAfE9n4l54I3I9ReqRMPdLCT2Qhb47+DnySJlYzBBdKXoodRrbyc1ygqmVCd4gKF6up5g9gPgPXsXz0K9SmFZFg0K0GF4P7m+RAFhxX73yXWNgE49SEV57iJoSw/ZcwyvpCtwSwJxLDYxAu1xV6wNU3BFZ3F4AX67fCLHpYrUyx0TEpflHxNWl7OVTC5my1ma5Y9q54RHQ1EI/ZchL+nVz/ip/+rdwYGAwyCW4a3obz8xqxbKsoU3wvJBJkmpE0cXg5UzU=", "expected": { "id": "deadbeefcafef00d", "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "shop", "geohash": "u0edj70gs", "precision": 9, "timestamp": 1700001012 } },
+      { "kind": "atm", "content": "jtqlx2AWQLWl+7f63ib/ZAokDrn6D+RBSYa9fwVoKoHrx1BZIff/21YWZzMwvLde0TbTL++WsQj+nJKQ8Dpmb+cNOR1rERk32I6sSjABB8gabN6sQ0E1Fqa7Gw3gDqJLTOPE7XTgTeER2GYxyMxvKLOGonWON8ljqLHKJ0bX6T5ckkwKMkxn/eKeuJrjHO+coyLGWjlvz/V89tYwrKxK7q6cYRGEBrxWzn6AfBcLKvchWISub/3ny4XwrczboDasPgyF54zI9w==", "expected": { "id": "deadbeefcafef00d", "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "atm", "geohash": "u0edj70gs", "precision": 9, "timestamp": 1700001013 } },
+      { "kind": "firstaid", "content": "teXSvFK1f4w7mXdWJegJfzuU+1FPtomhtL/ruc0L3wsDJMo7OAPOJsZb7SMEfLnTc4uvnd1AoSMNk2O9ldeIqscYf22h4+lrWBWgxQFbz/Eq7gDUi9qsX+1XBgGTRFz25P7A8+d7SeAfr5rrmHXqhr4WmxrMOXk4yT2bYYZo3uiJE2GfaR4T3gYl80AVFRpSY+SH4RGPDqqojPhk1X+Ki5KS2bf229kfO+xp3dRv0va5InNp2gBa5yzgbQdkP4sLVicwHdXFPxzBmEbF", "expected": { "id": "deadbeefcafef00d", "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "firstaid", "geohash": "u0edj70gs", "precision": 9, "timestamp": 1700001014 } },
+      { "kind": "kids", "content": "ZGaRZfRKhukYeV+uaOuFuAafJMwEXkoMW3tvYw5BdqmFQUg4pItXk1K5Kef5P4g7pUPikNDUr0eNaaTPqbRtVm4/hgg3JE2wEMEOE4TQIAJ20oLvLbTqHfZ5B29obnFhBcYAm9gRuz1HsyISw5XJJF/MGgqRFT5OwJ/hUnR/fjKSg82B9LXPZBfIx/uHihyCISEmhOmT7SIRty0BQ5IXAo131nOhQG+H0iLzltIDbJjonRSa3ZMKvFjof64Yf3rsM94ChdThjjg=", "expected": { "id": "deadbeefcafef00d", "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "kids", "geohash": "u0edj70gs", "precision": 9, "timestamp": 1700001015 } },
+      { "kind": "pet", "content": "kjWgtXyYtkZH/FmAF8LDLxFvesL0sA65r/sYpqhzhTIU/ORN66uXSfPwpDIM72Ob1FMLI0v0/myNLPxaVjz7EAGbKVYv6AV3ctXMjkjxIqsnvgbhDOIMS/1xQAees46QfY4ZX/ggdsad5WDcJGqjfWoM8pLapZws0hMRw0f4z0U65o9qm9FBvdRFoY1pd4GangA4BoSz0y1QwgKnUOpdIOpTYqhfaQg2V3zdOqlOx5jBGX1+1gNge05pwj7rUvZKa2PRGcZc+A==", "expected": { "id": "deadbeefcafef00d", "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "pet", "geohash": "u0edj70gs", "precision": 9, "timestamp": 1700001016 } },
+      { "kind": "avoid", "content": "UhAsUI55T8fXBateb3c3ox9mO77Q7IT4GobxwBeG9h1lra/sC0yyZ57gan8GHSnlCHGunUt0PG4A7v3nI1aEUOgugAvyPyKtWQZJXS1GOnvVtfD9RGX1DYjjSzQol3d7wNGeuW/rMDoJO+pv8fDQs4+Qw+0jsati/G3vZbHc/tL45zHN9+FMRD9UTm2CKn11DDdaSNxv/21Pzubh7OkZkVdS6h4ynZDDnMAHXfBb08FPjuxkSOyWw/JDNj4MBt3W9aBe+bnrL8lm", "expected": { "id": "deadbeefcafef00d", "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "avoid", "geohash": "u0edj70gs", "precision": 9, "timestamp": 1700001017 } }
+    ]
+  },
+  "merge": {
+    "pins": {
+      "car": { "id": "11111111", "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "car", "geohash": "u0edj70", "precision": 7, "timestamp": 10 },
+      "carMoved": { "id": "11111111", "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "car", "geohash": "u0edj71", "precision": 7, "timestamp": 20 },
+      "other": { "id": "22222222", "from": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "kind": "water", "geohash": "u0edj72", "precision": 7, "timestamp": 5 },
+      "tomb": { "id": "11111111", "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "car", "geohash": "u0edj70", "precision": 7, "timestamp": 30, "removed": true },
+      "staleDrop": { "id": "11111111", "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "car", "geohash": "zzzz", "precision": 7, "timestamp": 1 },
+      "tombByOther": { "id": "11111111", "from": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "kind": "car", "geohash": "u0edj70", "precision": 7, "timestamp": 30, "removed": true },
+      "reDrop": { "id": "11111111", "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "car", "geohash": "u0edj7z", "precision": 7, "timestamp": 40 }
+    },
+    "cases": [
+      {
+        "name": "basic merge of two distinct ids builds a 2-entry list",
+        "sequence": ["car", "other"],
+        "expectedLength": 2
+      },
+      {
+        "name": "a newer drop of the same id replaces it",
+        "sequence": ["car", "other", "carMoved"],
+        "expectedFindId": "11111111",
+        "expectedGeohash": "u0edj71"
+      },
+      {
+        "name": "an older drop of the same id is ignored (same list reference returned)",
+        "startSequence": ["carMoved", "other"],
+        "incoming": "staleDrop",
+        "expectSameRef": true
+      },
+      {
+        "name": "a tombstone is retained as an entry, not dropped, and outranks the drop",
+        "startSequence": ["carMoved", "other"],
+        "incoming": "tomb",
+        "expectedLength": 2,
+        "expectedFindId": "11111111",
+        "expectedRemoved": true
+      },
+      {
+        "name": "a replayed drop after its tombstone never resurrects the pin",
+        "sequence": ["car", "tomb", "car"],
+        "expectedFindId": "11111111",
+        "expectedRemoved": true
+      },
+      {
+        "name": "a tombstone that arrives before its drop is never forgotten (drop never resurrects it)",
+        "sequence": ["tomb", "car"],
+        "expectedFindId": "11111111",
+        "expectedRemoved": true
+      },
+      {
+        "name": "a genuinely newer re-drop after a tombstone does land (un-removes with new state)",
+        "sequence": ["car", "tomb", "reDrop"],
+        "expectedFindId": "11111111",
+        "expectedRemoved": false,
+        "expectedGeohash": "u0edj7z"
+      },
+      {
+        "name": "another member's tombstone lands on the pin — removal is by id, signed as the remover, not the dropper",
+        "sequence": ["car", "tombByOther"],
+        "expectedFindId": "11111111",
+        "expectedRemoved": true,
+        "expectedFrom": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "name": "the original dropper's drop replaying after another member's tombstone still loses",
+        "sequence": ["car", "tombByOther", "car"],
+        "expectedFindId": "11111111",
+        "expectedRemoved": true,
+        "expectedFrom": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    ]
+  },
+  "authoredPins": {
+    "note": "flock's pin.ts (6bea625) added an exported pure helper authoredPins(list, pk) = pins whose latest held state a given pubkey authored, tombstones included, used to build the anti-entropy re-send set on presence. Kindependence's pins.ts implements the equivalent selection inline (self.identityPk filter) inside its unexported resendAuthoredPins, wired to a roster-add event rather than a presence announce — see flock-pin-vectors.test.ts for how this is exercised.",
+    "list": {
+      "car": { "id": "11111111", "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "car", "geohash": "u0edj70", "precision": 7, "timestamp": 10 },
+      "other": { "id": "22222222", "from": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "kind": "water", "geohash": "u0edj72", "precision": 7, "timestamp": 5 }
+    },
+    "cases": [
+      { "name": "returns only the pins a member authored", "pk": "A", "expectedIds": ["11111111"] },
+      { "name": "returns only the pins the other member authored", "pk": "B", "expectedIds": ["22222222"] },
+      { "name": "after B removes A's pin, only B's tombstone is in the re-send set — A stays silent", "afterTombstoneByOther": true, "byA": [], "byB": ["11111111"] }
+    ]
+  },
+  "invalid": {
+    "seedHex": "1111111111111111111111111111111111111111111111111111111111111111",
+    "decryptRejects": [
+      { "name": "unknown kind", "content": "u9mYooFGRm9QHpleKI7W4FKCEj4ynyIPdqKxyFBysDt85QMIlXNjD47lN7WhyRqNc80L2lbyQsmHHRBUBrO1XbbP5+c9r+O/xgHIpDPgM7crfKYdLjro8U1A0ByDKI+e/tqLLGvTcQJUeZfMdV7PbGw4GwjwOFyVctQO8KIqKjcHCbsYhEGecLj6Ia9IVGB0NfcEXUUk1G5UkoXXNZ1UU6WHR0thG1Y3OoHUV692AaOtvDibViAl7sy15RhlN/g=", "errorMatch": "kind" },
+      { "name": "free text where kind must be an enum key", "content": "TljIUmnL/LKlwh0IpqcvOhyUrIXIUWoVILtTVvPF1w+nCpo9d/ukX6er2wCcOoGi/oJMAgg0dg8RahZ0xAi5/hAdQTzi/bdULO1Ehd/05WG8PTSUIUttUq+q6/Rda50g3P2mWa1QCSjTZtRXxbVaeTvMEH6U1iNImmYogqXrADHMn78pLVPpfoHp9xydm6p7xeF50Hzxhuz7lv00YwJEyHUNWfx6C8U0gwr3tV/AcFMxc2NMzPGypl0vnwQgpCZkbCo2ZNjXi7TZ2g1CTw==", "errorMatch": "kind" },
+      { "name": "bad geohash (not in the geohash alphabet range / wrong shape)", "content": "vntsefEz1WrkOf0Tz10I5XzEnM44TsqDOghUpEyQBc1hPn4tE+ULu3iEXzljYzdtWzHn0cKgkFRmOQuyAN/L8bGDDQkbtYMfZjZBakS+Y+6DEQVEUnz7pCmuhgmhEKEH3BsY/B3wxtHL3Ic/U2LcnrQjRsqMWL9qHZ4sijDMu8il9Mbze+qbRSnutNp6V26X6q1wjhcaZp2kOgH0Dwd0jZvyiDb0YGqz/ilSCtaranrkpPAZ/dWi83bm+gKfZRWP8zI=", "errorMatch": "geohash" },
+      { "name": "id outside 8-32 lowercase hex chars", "content": "Qm+mvaKGSD8jAtcdQasQM9t6DZBmP3i2hbNl/95D61t7/XYzX5N/iuT6C6MPI8GDvxBUIJZUkr+wcvV73x9wGKfWUxW7Ymz1SwO7LCYKIE18AhR55UnVSK/mmr9JiGyTsmt3YJR0d9yoXxmhc2Hche3D+eoKmyqia4h0pAaiKp57vwJTHRfVtSYWL6ajaPXfNbZQfImHJx+bzPASrLM6ddsPII/bIIEWk/D8XzOvzQv/lIw=", "errorMatch": "id" },
+      { "name": "from is not 64-char hex", "content": "ScFig+Zr+mOxk/b4Rh0AVwjNupAblLyexrncDDtr/xs/sQ0AoiRNq7063ji+nGEYjQAtm4BoaRC3XzlQ/Xv5+iPxYmNvgPFOjW5jpMFS744Xv6vBu5+0f22wvPyF3iapsgv0jG+sXjtpzVgIswu0n7Jnv5AImNT1v6i9cJUng7OhCIrQ", "errorMatch": "from" },
+      { "name": "plaintext is not valid JSON", "content": "5Okjq3wKLZblYCKRobW3PlM8WjLgfkfh7J9u/591USXvrY0vP3HQGyFvrQ==", "errorMatch": "JSON" }
+    ],
+    "decryptRejectsWrongSeed": {
+      "content": "FAU6+U8p94E0qfTcnzjlMpAg2++WZfnTgEd+QHdrZ1aL9JGUxVtey7jVEfYpVXjDhElXnhlAB50TA0HJVZLkrhVb8Icky1cfjHwmGkOk0H2Mf7OZt2ZWuH3GShry/YjdwYCM/vlMfOuzsBs7DNk21hAK/cSaMsfwQuH12UDzJRtlRbfHr5IO0mZj9v++pnFNWnRH8Ngq/y/tNuwklUF5FWZ1U6oyClyj2CxJsTqWx5wJnTi6qDIBSeccDzdfovebupMbzE6SeA==",
+      "wrongSeedHex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "buildPinSignalRejects": [
+      { "name": "unknown kind", "params": { "groupId": "g", "seedHex": "1111111111111111111111111111111111111111111111111111111111111111", "id": "deadbeefcafef00d", "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "nope", "geohash": "u0edj70gs", "precision": 9 } },
+      { "name": "bad geohash", "params": { "groupId": "g", "seedHex": "1111111111111111111111111111111111111111111111111111111111111111", "id": "deadbeefcafef00d", "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "car", "geohash": "NOT A GEOHASH", "precision": 9 } },
+      { "name": "precision out of 1-12 range", "params": { "groupId": "g", "seedHex": "1111111111111111111111111111111111111111111111111111111111111111", "id": "deadbeefcafef00d", "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "kind": "car", "geohash": "u0edj70gs", "precision": 13 } }
+    ]
+  }
+}

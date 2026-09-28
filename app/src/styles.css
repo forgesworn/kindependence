@@ -1,0 +1,932 @@
+/* Kindependence — app shell styling in the Kindred candlelight system
+   (the Kindred brand book): warm ink surfaces, paper text, flame-gold
+   accent, serif display headings. Map data colours stay their own semantic
+   set — see `.map-pin` below. */
+
+:root {
+  /* Kindred candlelight palette (kindred.software): the room, warm ink
+     surfaces, paper text, flame-gold accent. */
+  --bg: #17110b;
+  --surface: #241b12;
+  --line: #3a2e1f;
+  --text: #f9f8f4;
+  --muted: #a08d72;
+  --accent: #e0a458;
+  --serif: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', serif;
+  --nav-h: 64px;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+#app { min-height: 100%; }
+
+.screen {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100dvh;
+  padding: max(24px, env(safe-area-inset-top)) 20px calc(var(--nav-h) + 24px);
+}
+
+h1 { margin: 0 0 8px; font-size: 24px; font-family: var(--serif); }
+.muted { color: var(--muted); }
+
+.nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--nav-h);
+  padding-bottom: env(safe-area-inset-bottom);
+  display: flex;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+
+.nav button {
+  flex: 1;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.nav button[aria-current='true'] {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+button, input {
+  font: inherit;
+  color: var(--text);
+}
+
+button {
+  padding: 10px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+input[type='text'] {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  margin: 8px 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+h2 { font-size: 16px; margin: 20px 0 8px; font-family: var(--serif); }
+
+.pairing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  padding: 16px 0;
+}
+
+.qr {
+  width: 100%;
+  max-width: 256px;
+  height: auto;
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+
+.revoked-note {
+  color: #f7b955;
+  border: 1px solid rgba(247, 185, 85, 0.4);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 0 0 16px;
+}
+
+.contact-group { margin-bottom: 8px; }
+
+.contact-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.contact-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.badge {
+  font-size: 11px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 8px;
+  text-transform: capitalize;
+}
+
+.add-contact { margin-top: 16px; }
+
+.form-error {
+  color: #ff8080;
+  font-size: 13px;
+  margin: 4px 0;
+}
+
+.onboarding-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.mnemonic-words {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  list-style: none;
+  margin: 16px 0;
+  padding: 0;
+}
+
+.mnemonic-words li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.word-index {
+  color: var(--muted);
+  font-size: 12px;
+  min-width: 18px;
+}
+
+.confirm-gate {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0;
+  color: var(--muted);
+}
+
+.child-setup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+/* Map tab (Task 14) — #map-mount is the render-on-state placeholder (a fresh
+   element every render); app.ts re-parents the persistent maplibre container
+   into it, sized to fill via the child combinator below. */
+.map-canvas {
+  position: relative;
+  height: 60vh;
+  min-height: 320px;
+  margin: 12px 0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.map-canvas > div { position: absolute; inset: 0; }
+
+/* Phase-2: SOS stays globally reachable — an overlay over the map itself,
+   not just inline on the Circles tab (safety.ts's `sosButtonView`, shared
+   markup with the Circles copy below). `.map-wrap` is the positioning
+   context; the overlay is a SIBLING of `.map-canvas`, not a child of it, so
+   it never matches the `.map-canvas > div` fill rule above. */
+.map-wrap { position: relative; }
+
+/* Task 3: the circle selector chip row stacks above the SOS button inside
+   one positioned overlay (rather than each having its own `position:
+   absolute`), so the two never fight for the same top-left/top-right
+   anchor. */
+.map-top-overlay {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.map-sos-overlay .sos-button { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5); }
+
+.map-selector {
+  background: rgba(23, 17, 11, 0.85);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 8px 10px;
+}
+.map-selector-label {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.map-selector-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.map-chip {
+  padding: 5px 10px;
+  font-size: 12px;
+  border-radius: 999px;
+  color: var(--muted);
+}
+.map-chip[aria-current='true'] {
+  color: var(--text);
+  border-color: var(--accent);
+  background: rgba(224, 164, 88, 0.12);
+}
+
+/* `.map-pin` covers three shapes: a precise marker (tag + dot), the self
+   marker (same shape, teal dot), and an approximate-area's label chip
+   (`.area` — tag only, no dot, centred on the cell rather than anchored to
+   its bottom). All three are clickable (Task 3: tapping any of them opens
+   the person sheet), unlike v1's purely decorative `pointer-events: none`. */
+.map-pin { display: flex; flex-direction: column; align-items: center; pointer-events: auto; cursor: pointer; }
+.map-pin .tag {
+  font-size: 12px;
+  padding: 2px 6px;
+  margin-bottom: 4px;
+  border-radius: 6px;
+  background: rgba(23, 17, 11, 0.85);
+  border: 1px solid var(--line);
+  color: var(--text);
+  white-space: nowrap;
+}
+.map-pin .dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  /* member blue — a map-semantic colour (not the chrome accent): distinct from
+     self green, area teal, place amber, meet magenta, drop violet. */
+  background: #6ea8fe;
+  border: 2px solid var(--bg);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+.map-pin.self .dot { background: #5fd0a8; }
+.map-pin.area .tag { margin-bottom: 0; border-color: #2fb8a0; }
+/* Task 7: a safe place's label chip — amber border, distinct from an area's
+   teal (`.map-pin.area`), matching the amber fill/outline map.ts draws for
+   the place polygon itself. Display-only (no click handler), unlike every
+   other `.map-pin` variant. */
+.map-pin.place { cursor: default; }
+.map-pin.place .tag { margin-bottom: 0; border-color: #e0a83c; color: #e0a83c; }
+
+/* Phase 4 Task 5 (brief §6.6-6.7): a temporary meeting point's flag marker —
+   magenta/pink, distinct from a place's amber (`.map-pin.place`) and an
+   area's teal (`.map-pin.area`) so the three never blur together at a
+   glance. Unlike a place, this IS clickable (map.ts's own click handler
+   opens meet.ts's tap sheet) — no `cursor: default` override here. */
+.map-pin.meet .tag { margin-bottom: 0; border-color: #d6538c; color: #d6538c; }
+
+/* Phase 7 Task 4 (design spec §4): a flock-interoperable dropped pin's
+   glyph chip — violet, distinct from a place's amber (`.map-pin.place`), a
+   meeting point's magenta (`.map-pin.meet`), and an area's teal
+   (`.map-pin.area`) so all four never blur together. Unlike a meeting
+   point, there's no polygon ring — a pin is an exact spot, not an area of
+   rendezvous (map.ts's `setDroppedPins`). Clickable, same as `.map-pin.meet`. */
+.map-pin.drop .tag { margin-bottom: 0; border-color: #9b7fe0; color: #9b7fe0; }
+
+/* Phase 4 Task 3 (brief §7.4): the cluster badge — a plain count, visually
+   distinct from every other `.map-pin` variant above (solid filled circle,
+   no tag/dot split) so it never reads as "one more person marker" at a
+   glance. Absorbed individual markers/labels are hidden (map.ts's
+   `recluster`, `display: none` on their own elements) while their cluster
+   badge stands in for them. */
+.map-pin.cluster {
+  display: flex;
+  flex-direction: row; /* overrides the base `.map-pin` rule's column direction */
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #6ea8fe; /* member blue, same as `.map-pin .dot` */
+  color: var(--bg);
+  font-size: 13px;
+  font-weight: 700;
+  border: 2px solid var(--bg);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+/* Phase 4 Task 4 (brief §7.5-7.6): off-screen edge chips. `.map-edge-chips`
+   is the ONE overlay layer every chip lives in (map.ts's `edgeChipsEl`,
+   appended as a sibling of maplibre's own canvas) — `pointer-events: none`
+   so it never blocks map drag/pan/click-through, with each chip opting back
+   in individually (`.map-edge-chip`'s own `pointer-events: auto`), same
+   "click-through shell, children opt in" idiom as `.map-top-overlay`'s
+   siblings needing none of that (every child there IS meant to be
+   clickable). Positioned via inline `left`/`top` (map.ts sets those per
+   chip, from `mapinfo.ts`'s `edgeAnchor`), `transform` here only re-centres
+   the element on that point. */
+.map-edge-chips {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+.map-edge-chip {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(23, 17, 11, 0.85);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.map-edge-chip-distance { color: var(--muted); font-weight: 400; }
+/* A group chip (2+ absorbed people, brief: tap -> the same member sheet
+   Task 3's cluster badge opens) — same solid-fill treatment as
+   `.map-pin.cluster` so the two "several people, one tap" markers read as
+   one visual family. */
+.map-edge-chip.group {
+  background: #6ea8fe; /* member blue, same as `.map-pin.cluster` */
+  color: var(--bg);
+  border-color: var(--bg);
+}
+.map-edge-chip.group .map-edge-chip-distance { color: var(--bg); }
+
+/* Task 7 (brief §13): the private child-first escalation banner (Map tab
+   overlay) and the "Add place here" form. */
+.map-escalation-overlay { display: flex; flex-direction: column; gap: 6px; }
+.escalation-banner {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 13px;
+  border-radius: 10px;
+  background: rgba(224, 168, 60, 0.15);
+  border: 1px solid #e0a83c;
+  color: var(--text);
+}
+.escalation-banner.escalated { background: rgba(192, 57, 43, 0.15); border-color: #c0392b; }
+/* Phase 6 Task 1 (design spec §1, brief §2.3): the map-check friction card
+   — deliberately calm/neutral, NOT the escalation banner's amber/red above:
+   this is a private, gentle nudge, never a warning (§31: must never read as
+   scolding). */
+.friction-card {
+  margin: 0 0 6px;
+  padding: 10px 12px;
+  font-size: 13px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--text);
+}
+.friction-card p { margin: 0 0 8px; }
+.friction-card-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.place-form {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 15;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.place-form h3 { margin: 0 0 8px; font-size: 15px; }
+.place-form select,
+.place-form input[type="text"] { margin-bottom: 8px; }
+.place-form .schedule-chips { margin-bottom: 8px; }
+
+/* Phase 7 Task 4 (design spec §4): the pin kind-picker's 18-glyph grid
+   (pins.ts's `kindPickerView`), inside the same `.place-form` sheet shell
+   every other map-overlay form/sheet in this app already uses. */
+.pin-kind-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.pin-kind-btn {
+  padding: 8px 4px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  text-align: center;
+  cursor: pointer;
+}
+
+/* Phase 3 Task 4: arrival windows — the guardian-only "Expected arrivals"
+   editor nested inside each place row (Circles tab's "Safe places" list).
+   Deliberately its own class, NOT `.place-form` — that one is
+   `position: absolute` for the map-overlay add-place form; this sits
+   inline within the place row instead. */
+.arrival-windows { margin-top: 8px; }
+.window-form {
+  padding: 10px 12px;
+  margin-top: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.window-form .schedule-chips {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.window-form input[type="time"],
+.window-form select { margin-bottom: 8px; }
+
+/* Task 3: the person sheet — a bottom sheet pinned just above the fixed nav
+   (so the nav stays reachable without closing the sheet first), covering
+   the map/circle-selector below it. */
+.person-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--nav-h);
+  z-index: 20;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 16px 20px;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.4);
+}
+.person-sheet h2 { margin: 0 4px 4px 0; }
+.sheet-close {
+  float: right;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+.sheet-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+.sheet-actions button[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.coming-soon {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* Phase 4 Task 3 (brief §7.4): the cluster member sheet — reuses
+   `.person-sheet`'s own fixed bottom-sheet positioning (`.cluster-sheet` is
+   layered on TOP of that class, not a replacement for it) plus the existing
+   `.contact-list`/`.contact-item` row styling, with a small avatar-initial
+   chip and a max-height + scroll so a large cluster's member list never
+   pushes the sheet (and the fixed nav below it) off-screen. */
+.cluster-sheet .contact-list {
+  max-height: 50vh;
+  overflow-y: auto;
+  margin-top: 8px;
+}
+.cluster-member {
+  cursor: pointer;
+  justify-content: flex-start;
+}
+.avatar-initial {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 13px;
+  font-weight: 700;
+}
+.cluster-member-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+/* Task 4 (brief §18): the person sheet's "destination is approximate" note
+   (never a bare-looking coordinate — see navexport.ts) and the "Copy
+   location" result/fallback text. Both intentionally styled the same as
+   `.muted small` copy elsewhere in the sheet — informational, not an error. */
+.approximate-note,
+.nav-status {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 8px;
+}
+
+/* Task 6 (brief §11.4-11.5): the person sheet's "Request precise location"
+   reason picker — a small bordered card so the discouragement copy reads as
+   a deliberate, separate step from the ordinary action row above it. */
+.precise-request-form {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.precise-request-form h3 { margin: 0 0 4px; font-size: 15px; }
+.precise-request-form .confirm-gate { margin: 8px 0; }
+.precise-request-form input[type="text"] { width: 100%; margin-top: 4px; }
+.precise-request-form .sheet-actions { margin-top: 12px; }
+
+/* Safety (Task 15) — SOS is deliberately the loudest thing on Circles (and,
+   phase-2, the Map overlay above — see `.map-sos-overlay`). */
+.safety-section { margin-bottom: 20px; }
+
+.sos-button {
+  display: block;
+  width: 100%;
+  padding: 18px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  background: #c0392b;
+  border: 1px solid #922b21;
+  border-radius: 12px;
+  text-align: center;
+  user-select: none;
+  touch-action: none;
+}
+
+.sos-button.pressing {
+  background: #922b21;
+  transform: scale(0.98);
+}
+
+.small { font-size: 12px; }
+
+.checkin-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.checkin-row .confirm-gate { margin: 0; font-size: 13px; }
+
+/* Agreements (Task 16) */
+select,
+input[type='datetime-local'] {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  margin: 8px 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.schedule-chips {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.agreement-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.agreement-card .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Family policy + approvals (Task 17) */
+.policy-circle {
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.policy-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 0;
+}
+
+.policy-row select { width: auto; margin: 0; }
+
+/* Per-circle baseline precision picker (Task 8) — same pill styling as the
+   Map tab's own circle-selector chips (`.map-selector-chips`/`.map-chip`). */
+.precision-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0;
+}
+.precision-chip {
+  padding: 5px 10px;
+  font-size: 12px;
+  border-radius: 999px;
+  color: var(--muted);
+}
+.precision-chip[aria-current='true'] {
+  color: var(--text);
+  border-color: var(--accent);
+  background: rgba(224, 164, 88, 0.12);
+}
+
+/* Activity (Task 2) */
+.activity-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 16px;
+}
+
+.activity-chip {
+  padding: 6px 12px;
+  font-size: 13px;
+  border-radius: 999px;
+  color: var(--muted);
+}
+
+.activity-chip[aria-current='true'] {
+  color: var(--text);
+  border-color: var(--accent);
+  background: rgba(224, 164, 88, 0.12);
+}
+
+.activity-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+}
+
+/* Messaging (Task 5) — the chat overlay replaces the tab body while a DM/
+   circle-chat thread is open (app.ts's `screenView`); nav stays visible
+   below it since it's rendered as ordinary in-flow content, not a fixed
+   sheet like the map's person sheet. */
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.chat-header h1 { margin: 0; }
+
+.chat-list {
+  list-style: none;
+  margin: 16px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-bubble {
+  align-self: flex-start;
+  max-width: 85%;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.chat-bubble p { margin: 2px 0 0; white-space: pre-wrap; word-break: break-word; }
+.chat-bubble .chat-sender { font-size: 11px; color: var(--muted); }
+.chat-bubble.mine {
+  align-self: flex-end;
+  background: rgba(224, 164, 88, 0.14);
+  border-color: var(--accent);
+}
+.chat-bubble.structured {
+  border-color: #2fb8a0;
+  background: rgba(47, 184, 160, 0.12);
+}
+
+.chat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+.chat-chip {
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 999px;
+  color: var(--muted);
+}
+
+.chat-composer {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.chat-composer input { flex: 1; margin: 0; }
+
+/* Unread badges (Circles tab + circle/member rows). */
+.badge.unread {
+  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.nav button .badge.unread {
+  margin-left: 4px;
+  padding: 1px 6px;
+}
+
+/* Phase 4 Task 6 (review-minor, Task 9 polish): the pickup lifecycle card's
+   phase-dots timeline (pickup.ts's `dotsView`) — was a bare run of unstyled
+   `<span>`s (invisible: a span has no intrinsic size). A small horizontal
+   dot chain: an upcoming phase is a hollow/muted ring, a reached one
+   (`.done`, includes the current phase) fills solid, and the current phase
+   ALSO gets a soft halo (`.current`, layered on `.done`) so "how far we've
+   gotten" and "where we are right now" are both readable at a glance without
+   needing the `title` tooltip. §31-neutral: the existing accent blue only —
+   no red/green/amber "alarm" colouring, same restraint every other status
+   dot/badge in this file already keeps to. */
+.pickup-dots {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0;
+}
+.pickup-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1.5px solid var(--line);
+}
+.pickup-dot.done {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.pickup-dot.current {
+  box-shadow: 0 0 0 3px rgba(224, 164, 88, 0.28);
+}
+
+.pickup-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.pickup-title { margin: 0; }
+.pickup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Phase 6 Task 2/4 (design spec §2): the You tab's "Independence" section —
+   one .milestones-circle per circle a guardian has children in, one
+   .milestone-card per child. Same plain-card treatment as
+   .policy-circle/.agreement-card above (deliberately unremarkable: applying
+   a level is a routine settings change, never a milestone to celebrate —
+   §31 bans "earn"/"reward"/"points"/"unlock" for exactly this reason). */
+.milestones-circle { margin-bottom: 16px; }
+.milestones-circle h3 { margin: 0 0 8px; font-size: 15px; color: var(--muted); }
+
+.milestone-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+/* The three level buttons (Close/Growing/Trusted) — same pill-chip
+   treatment as .precision-chip/.activity-chip/.map-chip elsewhere in this
+   file, aria-current marking whichever level is currently applied. */
+.milestone-levels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.milestone-levels button {
+  padding: 5px 10px;
+  font-size: 12px;
+  border-radius: 999px;
+  color: var(--muted);
+}
+.milestone-levels button[aria-current='true'] {
+  color: var(--text);
+  border-color: var(--accent);
+  background: rgba(224, 164, 88, 0.12);
+}
+
+/* The step-up suggestion card, nested inside its child's own .milestone-card
+   once stepUpSuggestion fires. Reuses the teal "structured proposal" accent
+   .chat-bubble.structured already uses for the suggest-baseline DM card
+   (messages.ts) — visually ties this guardian-facing suggestion to its
+   child-facing sibling as the same kind of proposal, and deliberately NOT
+   the amber/red .escalation-banner treatment: a gentle suggestion is never a
+   warning (§31). */
+.milestone-suggestion {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #2fb8a0;
+  background: rgba(47, 184, 160, 0.12);
+}
+.milestone-suggestion ul { margin: 6px 0; padding-left: 18px; }
+.milestone-suggestion li { margin: 2px 0; }
+.milestone-suggestion .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* Phase 6 Task 3/4 (design spec §3): the age-based setup wizard — a
+   full-screen step flow (`.wizard-screen`, `screenView`'s own "modal state
+   wins over the tab body" idiom, same as .chat-overlay above, but rendered
+   in-flow within .screen rather than as a fixed overlay, since it replaces
+   the whole screen body — the fixed nav stays reachable below it either
+   way). */
+.wizard-age-bands {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 20px 0;
+}
+
+.wizard-summary-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+/* Apply is always the summary step's first button (wizard.ts's own render
+   order) — the one deliberate, positive action on this screen, so it alone
+   gets the accent-filled treatment (same fill idiom as .map-pin.cluster/
+   .map-edge-chip.group); Back/Skip stay plain buttons, same weight as
+   "declining is silent" (§31: neither reads as the wrong choice). */
+.wizard-summary-actions button:first-child {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+  font-weight: 600;
+}

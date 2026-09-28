@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Signet identity plan, Task 4: Nip55Plugin must see signer apps
+         (queryIntentActivities for installedSigners, and their content
+         providers) — package visibility on Android 11+ hides them without
+         this. Same entry as kithmoot-android's manifest. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="nostrsigner" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
+        </provider>
+
+        <!-- Native socket bridge (internal design record: 2026-09-28-native-socket-bridge.md):
+             foreground service that keeps SocketHub's relay WebSockets
+             (and the process) alive while the app has an active session
+             and at least one circle. Not exported: only this app starts
+             it, via RelaySocketPlugin.setActive. -->
+        <service
+            android:name=".RelaySocketService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- Phase 3 Task 6: home-screen widget. Push-from-app only (widget.ts's
+             debounced WidgetBridge.update() writes SharedPreferences and asks
+             this receiver's own render() to redraw) — not exported, no other
+             app can push to or query it. -->
+        <receiver
+            android:name=".KindependenceWidgetProvider"
+            android:label="@string/widget_label"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_kindependence_info" />
+        </receiver>
+    </application>
+
+    <!-- Permissions -->
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
+    <!-- Task 9 (brief §12/§29): @capacitor-community/background-geolocation's
+         watcher + @capacitor/local-notifications. Mirrors forgesworn/flock's
+         android/app/src/main/AndroidManifest.xml entries for the same two
+         plugins (its own extra BLE-mesh/stay-reachable permissions aren't
+         needed here — kindependence doesn't have that feature). The plugins'
+         own bundled manifests (node_modules/@capacitor-community/
+         background-geolocation, @capacitor/local-notifications) already
+         declare FOREGROUND_SERVICE/FOREGROUND_SERVICE_LOCATION/
+         POST_NOTIFICATIONS and merge automatically — ACCESS_BACKGROUND_LOCATION
+         is the one permission neither plugin declares for you, so it's
+         explicit here, same as flock's own manifest. -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Native socket bridge: RelaySocketService's foregroundServiceType
+         is dataSync (Android 14+ requires the matching permission). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
+    <!-- Signet identity plan, Task 11: sign-in's bunker-link/dependant QR
+         scanner (signin.ts, jsQR over getUserMedia) — scanner only, no
+         photo/video capture. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+</manifest>

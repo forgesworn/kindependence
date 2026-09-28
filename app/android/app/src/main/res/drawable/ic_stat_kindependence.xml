@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notification small icon — Android's status bar renders a local
+     notification's `smallIcon` as a flat white-on-transparent silhouette
+     regardless of any colour info in the source (API 21+ masks it to alpha
+     only), so this is a single white shape, not a copy of the full-colour
+     launcher icon. A single vector drawable (no per-density PNGs needed —
+     same approach as signet-app's own `ic_stat_signet.xml`), simplified from
+     the app's real mark (public/icon.svg: the Kindependence campfire — the
+     Kindred DNA flame over two crossed sticks) down to white shapes at
+     24-grid: the flame keeps its inner counter (drawn evenOdd, needs API 24 —
+     this module's minSdk) because a solid teardrop reads as a generic pin at
+     status-bar size; the sticks are two round-capped crossed strokes. Wired
+     via capacitor.config.ts's `plugins.LocalNotifications.smallIcon` and
+     notify.ts's own `schedule()` call (belt-and-suspenders). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M12,2.5 C14.6,5.9 16.2,8 16.2,10.6 a4.2,4.2 0 0,1 -8.4,0 C7.8,8 9.4,5.9 12,2.5 Z M12,6.2 C13.5,8.15 14.35,9.3 14.35,10.75 a2.35,2.35 0 0,1 -4.7,0 C9.65,9.3 10.5,8.15 12,6.2 Z" />
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M3.2,21.2 L20.8,17.6" />
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M3.2,17.6 L20.8,21.2" />
+</vector>

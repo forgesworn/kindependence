@@ -1,0 +1,133 @@
+# Manual-only signed release build. Kindependence has no release key yet (see
+# app/android/RELEASE_SIGNING.md) — this workflow exists so the pipeline is
+# ready the moment one is created and its secrets are provisioned. Until
+# then, running it fails clearly at the "Require signing secrets" step.
+#
+# Action refs pinned by SHA, as across ForgeSworn. checkout/setup-node pins
+# match forgesworn/signet-app's deploy.yml; setup-java/upload-artifact pins
+# match forgesworn/flock and forgesworn/trott respectively.
+name: Release APK (signed)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-signed-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Require signing secrets
+        env:
+          KINDEPENDENCE_KEYSTORE_BASE64: ${{ secrets.KINDEPENDENCE_KEYSTORE_BASE64 }}
+          KINDEPENDENCE_KEYSTORE_PASSWORD: ${{ secrets.KINDEPENDENCE_KEYSTORE_PASSWORD }}
+          KINDEPENDENCE_KEY_ALIAS: ${{ secrets.KINDEPENDENCE_KEY_ALIAS }}
+          KINDEPENDENCE_KEY_PASSWORD: ${{ secrets.KINDEPENDENCE_KEY_PASSWORD }}
+        run: |
+          missing=()
+          [ -n "$KINDEPENDENCE_KEYSTORE_BASE64" ] || missing+=("KINDEPENDENCE_KEYSTORE_BASE64")
+          [ -n "$KINDEPENDENCE_KEYSTORE_PASSWORD" ] || missing+=("KINDEPENDENCE_KEYSTORE_PASSWORD")
+          [ -n "$KINDEPENDENCE_KEY_ALIAS" ] || missing+=("KINDEPENDENCE_KEY_ALIAS")
+          [ -n "$KINDEPENDENCE_KEY_PASSWORD" ] || missing+=("KINDEPENDENCE_KEY_PASSWORD")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required secrets: ${missing[*]}. No release key exists yet — see app/android/RELEASE_SIGNING.md to create one and provision these repo secrets before running this workflow."
+            exit 1
+          fi
+
+      # Keep checkout's token from overriding the cross-repository read PAT.
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      # brood-kit is currently private. The other pinned kit dependencies are
+      # public. Remove this authentication step once every dependency is
+      # anonymously accessible. npm resolves GitHub Git dependencies over SSH,
+      # so these rewrites use HTTPS with a read-only, cross-repository PAT.
+      - name: Authenticate git for private @forgesworn deps
+        env:
+          FORGESWORN_READ_PAT: ${{ secrets.FORGESWORN_READ_PAT }}
+        run: |
+          if [ -z "$FORGESWORN_READ_PAT" ]; then
+            echo "::error::FORGESWORN_READ_PAT is required while brood-kit is private."
+            exit 1
+          fi
+          AUTH="https://x-access-token:${FORGESWORN_READ_PAT}@github.com/"
+          git config --global url."$AUTH".insteadOf "https://github.com/"
+          git config --global --add url."$AUTH".insteadOf "ssh://git@github.com/"
+          git config --global --add url."$AUTH".insteadOf "git@github.com:"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Sync Android project
+        working-directory: app
+        run: npx cap sync android
+
+      # Keystore is decoded to a temp file that lives only for this job run
+      # ($RUNNER_TEMP is wiped after the job) and is removed explicitly below
+      # as a belt-and-braces measure. Values only ever flow through env, never
+      # interpolated into a logged command line.
+      - name: Restore signing keystore
+        env:
+          KINDEPENDENCE_KEYSTORE_BASE64: ${{ secrets.KINDEPENDENCE_KEYSTORE_BASE64 }}
+          KINDEPENDENCE_KEYSTORE_PASSWORD: ${{ secrets.KINDEPENDENCE_KEYSTORE_PASSWORD }}
+          KINDEPENDENCE_KEY_ALIAS: ${{ secrets.KINDEPENDENCE_KEY_ALIAS }}
+          KINDEPENDENCE_KEY_PASSWORD: ${{ secrets.KINDEPENDENCE_KEY_PASSWORD }}
+        run: |
+          umask 077
+          KEYSTORE_PATH="$RUNNER_TEMP/kindependence-release.jks"
+          PROPS_PATH="$RUNNER_TEMP/kindependence-keystore.properties"
+          echo "$KINDEPENDENCE_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          cat > "$PROPS_PATH" <<EOF
+          storeFile=$KEYSTORE_PATH
+          storePassword=$KINDEPENDENCE_KEYSTORE_PASSWORD
+          keyAlias=$KINDEPENDENCE_KEY_ALIAS
+          keyPassword=$KINDEPENDENCE_KEY_PASSWORD
+          EOF
+          echo "KINDEPENDENCE_KEYSTORE_PROPERTIES=$PROPS_PATH" >> "$GITHUB_ENV"
+
+      - name: Build signed release APK
+        working-directory: app/android
+        run: ./gradlew assembleRelease
+
+      - name: Verify APK is signed with the expected key
+        run: |
+          BUILD_TOOLS="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)"
+          "${BUILD_TOOLS}apksigner" verify --print-certs \
+            app/android/app/build/outputs/apk/release/app-release.apk
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: kindependence-android-release
+          path: app/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Remove signing material and git credentials
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/kindependence-release.jks" "$RUNNER_TEMP/kindependence-keystore.properties"
+          # The runner is disposable; remove the PAT-bearing URL rewrites too.
+          rm -f "$HOME/.gitconfig"

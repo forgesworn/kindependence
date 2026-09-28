@@ -1,0 +1,25 @@
+{
+  "name": "kindependence",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "workspaces": [
+    "app"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "overrides": {
+    "nostr-tools": "2.23.9"
+  },
+  "scripts": {
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.11"
+  }
+}

@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.superpowers/
+.claude/
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+keystore.properties
+*-keystore.properties
+*.pem
+*.key
+*.log
+*.apk
+*.aab
+.DS_Store

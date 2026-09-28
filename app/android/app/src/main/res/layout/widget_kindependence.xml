@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- kindependence home-screen widget layout — 4 fixed row slots (name + line
+     each), rendered/hidden entirely by KindependenceWidgetProvider.render().
+     Matches the app's own dark background so the widget doesn't stand out
+     as a mismatched white box on the home screen. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/w_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="12dp"
+    android:background="#17110b">
+
+    <TextView
+        android:id="@+id/w_header"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="kindependence"
+        android:textStyle="bold"
+        android:textColor="#f9f8f4"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/w_name1"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:textStyle="bold"
+        android:textColor="#f9f8f4"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/w_line1"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="#a08d72"
+        android:textSize="12sp" />
+
+    <TextView
+        android:id="@+id/w_name2"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:textStyle="bold"
+        android:textColor="#f9f8f4"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/w_line2"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="#a08d72"
+        android:textSize="12sp" />
+
+    <TextView
+        android:id="@+id/w_name3"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:textStyle="bold"
+        android:textColor="#f9f8f4"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/w_line3"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="#a08d72"
+        android:textSize="12sp" />
+
+    <TextView
+        android:id="@+id/w_name4"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:textStyle="bold"
+        android:textColor="#f9f8f4"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/w_line4"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="#a08d72"
+        android:textSize="12sp" />
+
+    <TextView
+        android:id="@+id/w_footer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:textColor="#a08d72"
+        android:textSize="10sp" />
+
+</LinearLayout>
