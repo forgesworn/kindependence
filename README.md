@@ -369,6 +369,12 @@ Signed Android distribution also requires an off-repository release key; see
 
 ```bash
 nvm use
+# Public Git dependencies: this setting applies only to this installation.
+GIT_CONFIG_COUNT=2 \
+GIT_CONFIG_KEY_0=url.https://github.com/.insteadOf \
+GIT_CONFIG_VALUE_0=ssh://git@github.com/ \
+GIT_CONFIG_KEY_1=url.https://github.com/.insteadOf \
+GIT_CONFIG_VALUE_1=git@github.com: \
 npm ci
 npm run -w app dev
 ```
@@ -458,9 +464,10 @@ out in `res/layout/widget_kindependence.xml`) to redraw — no network or JS acc
 from the provider itself, it only ever reads what the app last wrote.
 
 ```bash
+# Run from the repository root. Requires JDK 21 and the Android SDK.
 npm run -w app build
-cd app && npx cap sync android
-cd android && ./gradlew assembleDebug
+(cd app && npx cap sync android)
+(cd app/android && ./gradlew assembleDebug)
 ```
 
 `assembleDebug` produces `app/android/app/build/outputs/apk/debug/app-debug.apk`,
@@ -485,17 +492,10 @@ The app pins `@forgesworn/flock`, `roost-kit`, `covey-kit` and
 `signet-contacts` to immutable commits in public Git repositories. BROOD is a
 local module, so installing does not require access to its former repository.
 
-npm may resolve GitHub dependencies over SSH. To install without an SSH key,
-use anonymous HTTPS for GitHub Git fetches:
-
-```bash
-git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
-git config --global --add url."https://github.com/".insteadOf "git@github.com:"
-npm ci
-```
-
-These rules affect GitHub Git fetches globally. If your GitHub SSH access is
-already configured, the normal quickstart works without adding them.
+npm may resolve GitHub dependencies over SSH. The Quickstart temporarily
+rewrites those GitHub fetches to anonymous HTTPS for `npm ci`, so an SSH key
+is not required and your global Git settings stay unchanged. If your GitHub
+SSH access is already configured, plain `npm ci` also works.
 
 `signet-login` is a checked-in MIT-licensed SDK snapshot with local fixes;
 its provenance and replacement instructions are in [vendor/README.md](vendor/README.md).

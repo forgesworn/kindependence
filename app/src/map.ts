@@ -16,6 +16,7 @@
 
 import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
+import mapWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import { decode as decodeGeohash } from 'geohash-kit'
 import {
   geohashCellRing,
@@ -43,6 +44,9 @@ import { haversineMetres } from '@forgesworn/flock/geofence'
 // listed in tsconfig's `types` array (app/tsconfig.json's is scoped to just
 // `vite/client`, deliberately not "every @types/* package in node_modules").
 import type { FeatureCollection } from 'geojson'
+
+// Bundle the worker and its shared imports for both Vite dev and release builds.
+maplibregl.setWorkerUrl(mapWorkerUrl)
 
 // Same defensive `typeof … === 'string'` read as circles.ts's VITE_DEFAULT_RELAY
 // (Vite's ImportMetaEnv types env vars `any`, so this narrows before use).
