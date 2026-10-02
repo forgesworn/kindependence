@@ -15,3 +15,4 @@ keystore.properties
 *.apk
 *.aab
 .DS_Store
+.wrangler/

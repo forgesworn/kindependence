@@ -12,7 +12,9 @@ and at desktop width.
 
 ## Deploy
 
-Served by Caddy on the Hetzner VPS (95.216.164.146) from
-`/var/www/kindependence`; TLS is automatic. To publish changes:
+Served by Cloudflare as a Worker with static assets (`kindependence-site`,
+config in `wrangler.jsonc`), on the custom domains `kindependence.app` and
+`www.kindependence.app`. Cloudflare manages the DNS records and TLS. To publish
+changes:
 
-    rsync -az --delete sites/kindependence/public/ root@95.216.164.146:/var/www/kindependence/
+    cd sites/kindependence && npx wrangler deploy
