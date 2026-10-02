@@ -14,7 +14,7 @@
 // in load() and cleared (only if it's still the current one) in
 // handleOnDestroy(); with no sink, entries simply stay in the log until
 // someone (a re-attached plugin, or `receive`) asks for them.
-package cc.trotters.kindependence;
+package dev.forgesworn.kindependence;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

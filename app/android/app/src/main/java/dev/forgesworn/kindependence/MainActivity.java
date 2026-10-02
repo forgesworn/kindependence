@@ -1,4 +1,4 @@
-package cc.trotters.kindependence;
+package dev.forgesworn.kindependence;
 
 import android.os.Bundle;
 import com.getcapacitor.BridgeActivity;

@@ -5,7 +5,7 @@
 // One OkHttpClient per hub (Factory holds it, shared by every Transport it
 // mints) with a 30 s pingInterval, so a dead network path is noticed within
 // about a minute even with nothing to send.
-package cc.trotters.kindependence;
+package dev.forgesworn.kindependence;
 
 import android.util.Log;
 

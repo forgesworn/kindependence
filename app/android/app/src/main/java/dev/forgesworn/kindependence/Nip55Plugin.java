@@ -31,7 +31,7 @@
 // remote-signer.ts's mapSignerError classes as SignerRejected.
 //
 // Registered by hand in MainActivity, like SecureKeyPlugin.
-package cc.trotters.kindependence;
+package dev.forgesworn.kindependence;
 
 import android.app.Activity;
 import android.content.ActivityNotFoundException;

@@ -13,7 +13,7 @@
 // Registered by hand in MainActivity (registerPlugin, before super.onCreate)
 // — same "app-local plugin, not an npm package" discipline as
 // WidgetBridgePlugin.
-package cc.trotters.kindependence;
+package dev.forgesworn.kindependence;
 
 import android.content.Context;
 import android.content.SharedPreferences;

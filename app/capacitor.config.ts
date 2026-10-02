@@ -2,11 +2,10 @@ import type { CapacitorConfig } from '@capacitor/cli'
 
 // Capacitor wraps the built PWA (dist) as a native Android app shell — the
 // map/beacons UI needs real device geolocation permissions, which only a
-// native install can prompt for the way this app's users expect. See
-// forgesworn/flock's capacitor.config.ts for the sibling convention this
-// mirrors (same reverse-domain namespace, cc.trotters.*).
+// native install can prompt for the way this app's users expect. The appId is
+// the Android application ID (dev.forgesworn.*, reverse-domain).
 const config: CapacitorConfig = {
-  appId: 'cc.trotters.kindependence',
+  appId: 'dev.forgesworn.kindependence',
   appName: 'Kindependence',
   webDir: 'dist',
   // Matches the app's own dark theme (styles.css / manifest.webmanifest

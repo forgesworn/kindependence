@@ -2,7 +2,7 @@
 // keeps in its `Map<id, RelaySocket>`. Pure Java (no Android/OkHttp
 // imports) so SocketHub and this class are testable under plain JUnit with
 // a fake SocketHub.Transport.
-package cc.trotters.kindependence;
+package dev.forgesworn.kindependence;
 
 import java.util.LinkedHashSet;
 import java.util.Set;

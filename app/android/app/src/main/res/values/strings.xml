@@ -2,8 +2,8 @@
 <resources>
     <string name="app_name">Kindependence</string>
     <string name="title_activity_main">Kindependence</string>
-    <string name="package_name">cc.trotters.kindependence</string>
-    <string name="custom_url_scheme">cc.trotters.kindependence</string>
+    <string name="package_name">dev.forgesworn.kindependence</string>
+    <string name="custom_url_scheme">dev.forgesworn.kindependence</string>
     <string name="widget_label">Kindependence</string>
     <string name="widget_description">Circle status from your home screen.</string>
     <string name="relay_service_channel">Circle connection</string>

@@ -15,10 +15,10 @@ if (keystorePropsFile.exists()) {
 }
 
 android {
-    namespace = "cc.trotters.kindependence"
+    namespace = "dev.forgesworn.kindependence"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "cc.trotters.kindependence"
+        applicationId "dev.forgesworn.kindependence"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 9

@@ -9,7 +9,7 @@
 // unused row slots, and the "as of / open to refresh / open to set up"
 // freshness footer (this class's own clock read — the payload only carries
 // `pushedAt` via SharedPreferences, not a pre-formatted footer string).
-package cc.trotters.kindependence;
+package dev.forgesworn.kindependence;
 
 import android.app.PendingIntent;
 import android.appwidget.AppWidgetManager;

@@ -11,7 +11,7 @@
 // touching the hub — the sockets and their logs are untouched, and
 // RelaySocketPlugin.setActive(true) (e.g. on the next resume) restarts the
 // service. See the plan's Leftovers for the longer-term follow-up.
-package cc.trotters.kindependence;
+package dev.forgesworn.kindependence;
 
 import android.app.Notification;
 import android.app.NotificationChannel;

@@ -10,7 +10,7 @@
 // evicted and counted (`dropped()`), and `hasGapAfter` tells the caller when
 // it asked for a seq that no longer exists because of that eviction (as
 // opposed to one it acked itself, which is not a gap).
-package cc.trotters.kindependence;
+package dev.forgesworn.kindependence;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;

@@ -18,7 +18,7 @@
 //
 // Registered by hand in MainActivity, same "app-local plugin" discipline as
 // WidgetBridgePlugin/Nip55Plugin/SecureKeyPlugin.
-package cc.trotters.kindependence;
+package dev.forgesworn.kindependence;
 
 import android.Manifest;
 import android.content.Context;

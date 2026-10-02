@@ -456,7 +456,7 @@ reading the device's own battery level/charging state, and Capacitor's own
 webview/plugin bridge.
 
 The home-screen widget is the one piece of real native UI, under
-`app/android/app/src/main/java/cc/trotters/kindependence/`: a tiny in-repo
+`app/android/app/src/main/java/dev/forgesworn/kindependence/`: a tiny in-repo
 Capacitor plugin (`WidgetBridgePlugin.java`) that `widget.ts` hands a small
 JSON status payload to, which writes it to `SharedPreferences` and asks the
 app-widget provider (`KindependenceWidgetProvider.java`, registered in
