@@ -238,7 +238,7 @@ describe('notePoolActivity / recoverIfStale (impure driver)', () => {
 // Device check 2026-09-27 (phase 2 step 6): Android WebView freezes the page
 // when Kindependence goes to the background (a signer round trip, screen
 // off). Every relay socket is then closed under it — console: "WebSocket
-// connection to 'wss://relay.trotters.cc/' failed: Page entered
+// connection to 'wss://relay.example/' failed: Page entered
 // Back-Forward Cache." — and nostr-tools treats that first error as a
 // failed connection: `skipReconnection`, the relay dropped from the pool
 // and every subscription on it closed for good. Beacon publishes (each on

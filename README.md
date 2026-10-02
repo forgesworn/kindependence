@@ -438,9 +438,10 @@ Both the default relay and the map's tile source are overridable per
 environment (Vite `import.meta.env`, so these are build-time — set them in
 `app/.env.local` or the shell before `npm run -w app dev`/`build`):
 
-- `VITE_DEFAULT_RELAY` — overrides the built-in default relay
-  (`wss://relay.trotters.cc`) that circles, beacons, and safety signals fan
-  out to when a circle/settings hasn't picked one explicitly.
+- `VITE_DEFAULT_RELAY` — overrides the built-in default relays (a
+  comma-separated list; defaults to `wss://relay.damus.io`, `wss://nos.lol`
+  and `wss://relay.primal.net`) that circles, beacons, and safety signals fan
+  out to when a relay hasn't been picked explicitly in settings.
 - `VITE_TILE_URL` — overrides the raster tile source the Map tab uses
   (defaults to OSM's public tile server); pair with `VITE_TILE_ATTRIBUTION`
   to change the attribution string shown alongside it.

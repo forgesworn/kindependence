@@ -70,6 +70,7 @@
 // been verified.
 
 import * as store from './store.js'
+import { relaysFromSettings } from './relay-defaults.js'
 import * as approvals from './approvals.js'
 import * as beacons from './beacons.js'
 import * as poolHealth from './pool-health.js'
@@ -120,16 +121,14 @@ function publish(relays: string[], signed: { id: string; sig: string }): Promise
 // ---------------------------------------------------------------------------
 // Relay boot helper — the app's one place to assemble a relay array (kit
 // purity: covey-kit/roost-kit take relays as plain parameters and bake in no
-// defaults of their own). VITE_DEFAULT_RELAY overrides the built-in default.
+// defaults of their own). VITE_DEFAULT_RELAY (comma-separated) overrides the built-in defaults.
 // ---------------------------------------------------------------------------
 
-const ENV_RELAY = typeof import.meta.env.VITE_DEFAULT_RELAY === 'string' ? import.meta.env.VITE_DEFAULT_RELAY.trim() : ''
-const DEFAULT_RELAY = ENV_RELAY || 'wss://relay.trotters.cc'
-
-/** The app's relay set for covey/roost transport calls, built once from
- *  settings and falling back to the default relay. */
+/** The app's relay set for covey/roost transport calls: a relay the user has
+ *  saved in settings wins as the only relay; otherwise the default list
+ *  (relay-defaults.ts). */
 export function appRelays(p: store.Persisted): string[] {
-  return [p.settings.relayUrl || DEFAULT_RELAY]
+  return relaysFromSettings(p.settings)
 }
 
 // ---------------------------------------------------------------------------

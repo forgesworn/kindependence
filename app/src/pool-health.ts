@@ -288,7 +288,7 @@ let lastDeadMs: number | null = null // when the pool was last found dead
  * Android WebView freezes this page while Kindependence is in the background
  * (a NIP-55 round trip to My Signet, the screen going off) and closes every
  * WebSocket under it — console: "WebSocket connection to
- * 'wss://relay.trotters.cc/' failed: Page entered Back-Forward Cache."
+ * 'wss://relay.example/' failed: Page entered Back-Forward Cache."
  * nostr-tools reads that first error as a failed connection
  * (`skipReconnection`), drops the relay and closes every subscription on it
  * for good. Publishes still work, each opening a fresh connection, and

@@ -376,11 +376,20 @@ describe('createCircleNow — Task 12 fix round 2, finding 1c (security, root ca
 })
 
 describe('appRelays', () => {
-  it('falls back to the default relay when settings has none', () => {
-    expect(appRelays(fakePersisted())).toEqual(['wss://relay.trotters.cc'])
+  it('falls back to the three public default relays when settings has none', () => {
+    expect(appRelays(fakePersisted())).toEqual([
+      'wss://relay.damus.io',
+      'wss://nos.lol',
+      'wss://relay.primal.net',
+    ])
   })
 
-  it('uses the saved relay when set', () => {
+  it('returns a fresh array each call, so callers cannot mutate the defaults', () => {
+    appRelays(fakePersisted()).push('wss://mutated.example')
+    expect(appRelays(fakePersisted())).toHaveLength(3)
+  })
+
+  it('uses only the saved relay when set', () => {
     expect(appRelays(fakePersisted({ settings: { relayUrl: 'wss://example.relay' } }))).toEqual(['wss://example.relay'])
   })
 })

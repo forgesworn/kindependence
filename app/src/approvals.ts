@@ -80,6 +80,7 @@ import * as store from './store.js'
 import type { SessionInfo } from './session.js'
 import * as beacons from './beacons.js'
 import * as activity from './activity.js'
+import { relaysFromSettings } from './relay-defaults.js'
 import { notify, shouldNotifyForEvent } from './notify.js'
 import { currentSession, phoneSigner } from './session.js'
 import { enqueue, registerSender, stillEnqueuingSession, pending as queuePending } from './structural-queue.js'
@@ -119,14 +120,12 @@ const MAX_APPROVALS = 100
 // ---------------------------------------------------------------------------
 // Relay boot helper — deliberately duplicated from circles.ts's own
 // `appRelays` (see the module doc comment: importing it here would make
-// circles.ts <-> approvals.ts circular). Same computation, same default.
+// circles.ts <-> approvals.ts circular). Same computation, via the import-free
+// relay-defaults.ts that both share.
 // ---------------------------------------------------------------------------
 
-const ENV_RELAY = typeof import.meta.env.VITE_DEFAULT_RELAY === 'string' ? import.meta.env.VITE_DEFAULT_RELAY.trim() : ''
-const DEFAULT_RELAY = ENV_RELAY || 'wss://relay.trotters.cc'
-
 function relaysFor(p: store.Persisted): string[] {
-  return [p.settings.relayUrl || DEFAULT_RELAY]
+  return relaysFromSettings(p.settings)
 }
 
 /** The fixed set of administrative actions family policy can govern

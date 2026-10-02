@@ -116,7 +116,7 @@ describe('store — round trip', () => {
     const p: store.Persisted = {
       v: 1,
       circles: [circle],
-      settings: { relayUrl: 'wss://relay.trotters.cc', routingUrl: 'https://routing.example', meetVenues: true },
+      settings: { relayUrl: 'wss://relay.example', routingUrl: 'https://routing.example', meetVenues: true },
       safetyEvents: [{ id: 'evt-1', circleId: 'a', from: 'b'.repeat(64), kind: 'checkin', at: 100 }],
       agreements: [{
         agreement: {

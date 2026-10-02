@@ -54,15 +54,11 @@ import { bytesToHex } from '@noble/hashes/utils.js'
 import { startQrScan, stopQrScan, mountQrScanner } from './qr-scan.js'
 import * as contactsView from './contacts-view.js'
 import * as linkPairing from './link-pairing.js'
+import { relaysFromSettings } from './relay-defaults.js'
 
-// Same "app default, overridable by settings, VITE_DEFAULT_RELAY for local
-// dev" idiom as circles.ts's/approvals.ts's own `DEFAULT_RELAY` — kept as a
-// separate constant here (not exported from either) since duplicating one
-// literal is cheaper than a new shared module for it.
-const ENV_RELAY = typeof import.meta.env.VITE_DEFAULT_RELAY === 'string' ? import.meta.env.VITE_DEFAULT_RELAY.trim() : ''
-const DEFAULT_RELAY = ENV_RELAY || 'wss://relay.trotters.cc'
+// Same computation as circles.ts's `appRelays`, via the shared relay-defaults.ts.
 function relaysFor(p: store.Persisted): string[] {
-  return [p.settings.relayUrl || DEFAULT_RELAY]
+  return relaysFromSettings(p.settings)
 }
 
 const NOSTRCONNECT_PERMS = ['sign_event:30078', 'nip44_encrypt', 'nip44_decrypt']

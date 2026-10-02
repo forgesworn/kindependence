@@ -12,8 +12,11 @@ to other circle members or retained by relays.
 
 Circle traffic is encrypted and delivered through Nostr relays. Relays still
 see connection metadata such as IP addresses, timing and public event
-metadata. The built-in default relay is `wss://relay.trotters.cc`; it can be
-overridden using `VITE_DEFAULT_RELAY` or circle settings.
+metadata. The built-in default relays are the public relays `wss://relay.damus.io`,
+`wss://nos.lol` and `wss://relay.primal.net`; they are operated by third
+parties, not by this project. A build can replace them using
+`VITE_DEFAULT_RELAY` (a comma-separated list), and a relay saved in the app's
+settings replaces them with that single relay.
 
 The map requests tiles directly from OpenStreetMap's public tile server by
 default. The tile provider sees the viewer's IP address and the map areas
