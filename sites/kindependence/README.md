@@ -14,7 +14,11 @@ and at desktop width.
 
 Served by Cloudflare as a Worker with static assets (`kindependence-site`,
 config in `wrangler.jsonc`), on the custom domains `kindependence.app` and
-`www.kindependence.app`. Cloudflare manages the DNS records and TLS. To publish
-changes:
+`www.kindependence.app`. Cloudflare manages the DNS records and TLS.
+
+A push to `main` that touches `sites/kindependence/` deploys it automatically
+(`.github/workflows/deploy-site.yml`), then checks that kindependence.app is serving
+the new files. The workflow can also be run by hand from the Actions tab. To
+deploy from a local checkout instead:
 
     cd sites/kindependence && npx wrangler deploy

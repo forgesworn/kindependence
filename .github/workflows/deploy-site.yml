@@ -1,0 +1,50 @@
+name: Deploy site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "sites/kindependence/**"
+      - ".github/workflows/deploy-site.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-site
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: production
+      url: https://kindependence.app
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Deploy to Cloudflare
+        working-directory: sites/kindependence
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes wrangler@4.147.0 deploy --message "$GITHUB_SHA"
+
+      - name: Check kindependence.app serves this commit
+        run: |
+          for attempt in $(seq 1 12); do
+            ok=1
+            for f in index.html robots.txt sitemap.xml; do
+              path=$f; [ "$f" = index.html ] && path=
+              curl -fsS "https://kindependence.app/$path?v=$GITHUB_SHA" -o "$RUNNER_TEMP/live" \
+                && cmp -s "$RUNNER_TEMP/live" "sites/kindependence/public/$f" || ok=0
+            done
+            [ "$ok" = 1 ] && exit 0
+            sleep 10
+          done
+          echo "kindependence.app does not match sites/kindependence/public at $GITHUB_SHA" >&2
+          exit 1
