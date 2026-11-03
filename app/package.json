@@ -15,7 +15,7 @@
     "@capacitor/android": "^8.6.0",
     "@capacitor/core": "^8.6.0",
     "@capacitor/device": "^8.0.0",
-    "@capacitor/local-notifications": "^8.2.0",
+    "@capacitor/local-notifications": "^8.3.1",
     "@forgesworn/covey-kit": "git+https://github.com/forgesworn/covey-kit.git#89d537bed25226f3f555777577f4651f4f3fa4f8",
     "@forgesworn/flock": "git+https://github.com/forgesworn/flock-kit.git#eb96ce0c4e0b65cdaa42bdc4b47c81c9a92e4dae",
     "@forgesworn/roost-kit": "git+https://github.com/forgesworn/roost-kit.git#27d33dd671a0bf0fa24f4ab8bb813c88749852c2",
