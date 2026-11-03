@@ -21,7 +21,7 @@
     "@forgesworn/roost-kit": "git+https://github.com/forgesworn/roost-kit.git#27d33dd671a0bf0fa24f4ab8bb813c88749852c2",
     "@forgesworn/signet-contacts": "git+https://github.com/forgesworn/signet-contacts.git#a44b28615c1633531cb201984b011ddc79448b88",
     "@noble/hashes": "^2.4.0",
-    "canary-kit": "^2.10.0",
+    "canary-kit": "^2.12.2",
     "geohash-kit": "^1.5.1",
     "jsqr": "^1.4.0",
     "maplibre-gl": "^6.11.2",
