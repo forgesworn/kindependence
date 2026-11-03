@@ -132,6 +132,19 @@ export function stillEnqueuingSession(item: QueuedAction): boolean {
 
 /** Removes an item (any status) — the UI's cancel/dismiss. */
 export function cancel(id: string): void {
+  const item = pending().find(q => q.id === id)
+  if (item?.action === 'rekey') {
+    let removals: string[] = []
+    try { const payload = JSON.parse(item.payload); if (Array.isArray(payload.removals)) removals = payload.removals } catch { /* malformed queue item */ }
+    store.update(p => {
+      const other = new Set(p.structuralQueue.filter(q => q.id !== id && q.action === 'rekey' && q.circleId === item.circleId).flatMap(q => {
+        try { return JSON.parse(q.payload).removals ?? [] } catch { return [] }
+      }))
+      const cancelled = removals.filter(pk => !other.has(pk))
+      p.pendingRemovals[item.circleId] = (p.pendingRemovals[item.circleId] ?? []).filter(pk => !cancelled.includes(pk))
+      for (const pk of cancelled) delete p.pendingRemovalsAt[item.circleId]?.[pk]
+    })
+  }
   remove(id)
 }
 

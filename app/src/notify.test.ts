@@ -111,9 +111,9 @@ describe('QUIET_EXEMPT_KINDS (brief §32.5 — the 7 urgent kinds, exactly, exem
   it('contains exactly the 7 urgent kinds named by the task contract', () => {
     const expected: NotifyKind[] = [
       'sos', 'emergency-access', 'safe-area-escalation', 'pickup-requested',
-      'pickup-status', 'window-missed', 'leave-reminder',
+      'pickup-status', 'window-missed', 'leave-reminder', 'deadline-unconfirmed',
     ]
-    expect(QUIET_EXEMPT_KINDS.size).toBe(7)
+    expect(QUIET_EXEMPT_KINDS.size).toBe(8)
     for (const k of expected) expect(QUIET_EXEMPT_KINDS.has(k)).toBe(true)
     expect([...QUIET_EXEMPT_KINDS].sort()).toEqual([...expected].sort())
   })
@@ -215,6 +215,12 @@ describe('notify() — quiet-hours gate wired inside the one entry point (brief 
 
     await notify('sos', 'actor-urgent', 'SOS', 'Body')
     expect(notificationCtor).toHaveBeenCalledTimes(1)
+  })
+
+  it('notifies again for a distinct SOS within the consolidation window', async () => {
+    await notify('sos', 'repeat-sos', 'Help', 'First')
+    await notify('sos', 'repeat-sos', 'Help', 'Second')
+    expect(notificationCtor).toHaveBeenCalledTimes(2)
   })
 
   it('an ordinary kind fires normally when quiet hours are unset entirely', async () => {

@@ -167,7 +167,7 @@ function parseMeetPoint(o: unknown): MeetPoint | null {
   if (typeof r.id !== 'string' || !r.id) return null
   if (typeof r.name !== 'string') return null
   const centre = r.centre as { lat?: unknown; lon?: unknown } | undefined
-  if (!centre || typeof centre.lat !== 'number' || typeof centre.lon !== 'number' || !Number.isFinite(centre.lat) || !Number.isFinite(centre.lon)) return null
+  if (!centre || typeof centre.lat !== 'number' || typeof centre.lon !== 'number' || !Number.isFinite(centre.lat) || !Number.isFinite(centre.lon) || Math.abs(centre.lat) > 90 || Math.abs(centre.lon) > 180) return null
   if (typeof r.expiresAt !== 'number' || !Number.isFinite(r.expiresAt)) return null
   if (typeof r.createdBy !== 'string' || !r.createdBy) return null
   if (typeof r.createdAt !== 'number' || !Number.isFinite(r.createdAt)) return null
@@ -216,6 +216,8 @@ export function parseMeetSignal(content: string, expectedCircleId: string): { po
 // ---------------------------------------------------------------------------
 
 async function saveMeetPoints(circleId: string, points: MeetPoint[]): Promise<void> {
+  const deliverySession = currentSession()
+
   const p = store.load()
   const self = currentSession()
   const circle = p.circles.find((c) => c.id === circleId)
@@ -226,7 +228,7 @@ async function saveMeetPoints(circleId: string, points: MeetPoint[]): Promise<vo
     sp.meetMeta = { ...sp.meetMeta, [circleId]: { updatedAt: at, by: self.identityPk } }
   })
   const wrap = await buildMeetWrap(phoneSigner(), circle, points, at, self.identityPk)
-  await beacons.publishOrEnqueue(appRelays(p), wrap)
+  await beacons.publishOrEnqueue(appRelays(p), wrap, { session: deliverySession, circle })
 }
 
 export interface NewMeetDraft {
@@ -495,7 +497,7 @@ async function suggestFairSpot(): Promise<void> {
   const p = store.load()
   const circle = p.circles.find((c) => c.id === circleId)
   if (!circle) return
-  formState = { ...formState, circleId, suggesting: true, error: undefined }
+  formState = { ...formState, name: inputValue('meet-name'), circleId, suggesting: true, error: undefined }
   store.notify()
   const participants: MeetParticipant[] = knownMemberPositions(circle).map((m) => ({ lat: m.lat, lon: m.lon, label: m.name }))
   const suggestion = await suggestMeetSpot(participants, p.settings.routingUrl, p.settings.overpassUrl, p.settings.meetVenues === true)
@@ -641,6 +643,7 @@ export function settingsView(p: store.Persisted): string {
         meeting spot. Left blank, everything stays on this device — a plain
         straight-line estimate, never sent anywhere.
       </p>
+      <p class="muted small">A configured routing server receives this phone's location and destinations. Fair-spot requests also send members' shared positions. Circle sharing precision does not limit these requests.</p>
       <input id="meet-routing-url" type="text" placeholder="https://your-routing-server" value="${esc(routingUrl)}" />
       <div class="sheet-actions">
         <button type="button" data-action="meet-routing-url-save">Save</button>

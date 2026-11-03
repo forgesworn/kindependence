@@ -12,14 +12,15 @@
   },
   "dependencies": {
     "@capacitor-community/background-geolocation": "^1.2.26",
-    "@capacitor/android": "^8.4.1",
-    "@capacitor/core": "^8.4.1",
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/core": "^8.6.0",
     "@capacitor/device": "^8.0.0",
     "@capacitor/local-notifications": "^8.2.0",
     "@forgesworn/covey-kit": "git+https://github.com/forgesworn/covey-kit.git#89d537bed25226f3f555777577f4651f4f3fa4f8",
     "@forgesworn/flock": "git+https://github.com/forgesworn/flock-kit.git#eb96ce0c4e0b65cdaa42bdc4b47c81c9a92e4dae",
     "@forgesworn/roost-kit": "git+https://github.com/forgesworn/roost-kit.git#27d33dd671a0bf0fa24f4ab8bb813c88749852c2",
     "@forgesworn/signet-contacts": "git+https://github.com/forgesworn/signet-contacts.git#a44b28615c1633531cb201984b011ddc79448b88",
+    "@noble/hashes": "^2.4.0",
     "canary-kit": "^2.10.0",
     "geohash-kit": "^1.5.1",
     "jsqr": "^1.4.0",
@@ -30,7 +31,9 @@
     "signet-login": "file:../vendor/signet-login-0.17.3-local.tgz"
   },
   "devDependencies": {
-    "@capacitor/cli": "^8.4.1",
+    "@capacitor/cli": "^8.6.0",
+    "@vitest/coverage-v8": "^4.1.11",
+    "happy-dom": "^21.0.4",
     "typescript": "^6.0.2",
     "vite": "^8.0.0",
     "vitest": "^4.1.11"

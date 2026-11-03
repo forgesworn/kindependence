@@ -1,4 +1,4 @@
-// Native socket bridge (internal design record: 2026-09-28-native-socket-bridge.md):
+// Native socket bridge:
 // moves the relay TRANSPORT only to a Capacitor plugin (`RelaySocket`) backed
 // by a foreground Android service — protocol logic (nostr-tools, roost-kit)
 // is unchanged, it is just handed a WebSocket-shaped class backed by native

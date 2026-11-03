@@ -49,7 +49,7 @@ import * as activity from './activity.js'
 import * as pickup from './pickup.js'
 import { appRelays } from './circles.js'
 import { currentPosition, type Fix } from './geo.js'
-import { notify, shouldNotifyForEvent, type NotifyKind } from './notify.js'
+import { notify, shouldNotifyForEvent, requestAlertPermission, alertPermissionView, refreshAlertPermission, type NotifyKind } from './notify.js'
 import { currentSession, phoneSigner } from './session.js'
 import { deriveInbox, isGuardian } from '@forgesworn/covey-kit'
 import type { Circle } from '@forgesworn/covey-kit'
@@ -61,8 +61,8 @@ import { buildBuzzSignal, decryptBuzz, BUZZ_SIGNAL_TYPE } from '@forgesworn/floc
 import { decodeLegacyBuzz } from './legacy-buzz.js'
 import { buildFindPingSignal, decryptFindPing, FIND_PING_SIGNAL_TYPE, type FindPing } from '@forgesworn/flock/findping'
 import { encode as encodeGeohash } from 'geohash-kit'
-import { deriveDuressKey, decryptDuressAlert, type DuressAlert, type DuressLocation } from 'canary-kit'
-import { KINDS } from 'canary-kit/nostr'
+import { deriveDuressKey, decryptDuressAlert, type DuressAlert, type DuressLocation, buildDuressAlert, encryptDuressAlert } from 'canary-kit'
+import { KINDS, buildSignalEvent } from 'canary-kit/nostr'
 
 const nowSec = (): number => Math.floor(Date.now() / 1000)
 
@@ -108,16 +108,22 @@ const FIND_PING_FRESH_SEC = 5 * 60
  *  `decideEmission`'s `trigger:'help'` branch resolves to (see beacons.ts's
  *  `basePrecisionFor` doc comment for why this stays a shared constant
  *  rather than a hard-coded 11 here too). */
-export function helpLocationFrom(fix: Fix | null): DuressLocation | null {
-  if (!fix) return null
-  return { geohash: encodeGeohash(fix.lat, fix.lon, DEFAULT_PRECISIONS.help), precision: DEFAULT_PRECISIONS.help, locationSource: 'beacon' }
+export function helpLocationFrom(fix: Fix | null, now: number = fix?.at ?? nowSec()): DuressLocation | null {
+  if (!fix || now - fix.at > 300 || fix.at > now + 10) return null
+  const precision = now - fix.at > 90 ? 6 : DEFAULT_PRECISIONS.help
+  return { geohash: encodeGeohash(fix.lat, fix.lon, precision), precision, locationSource: 'beacon' }
 }
 
 /** Build the gift-wrapped SOS event for one circle. `memberPk` is who the
  *  alert is about (always the caller, in this app — v1 has no "raise the
  *  alarm for someone else" flow). */
-export async function buildHelpWrap(signer: Signer, circle: Circle, memberPk: string, location: DuressLocation | null): Promise<SignedEvent> {
-  const inner = await buildHelpSignal({ groupId: circle.id, seedHex: circle.seedHex, member: memberPk, location })
+export async function buildHelpWrap(signer: Signer, circle: Circle, memberPk: string, location: DuressLocation | null, at?: number): Promise<SignedEvent> {
+  let inner = await buildHelpSignal({ groupId: circle.id, seedHex: circle.seedHex, member: memberPk, location })
+  if (at !== undefined) {
+    const alert = buildDuressAlert(memberPk, location)
+    alert.timestamp = at
+    inner = buildSignalEvent({ groupId: circle.id, signalType: SIGNAL_TYPES.help, encryptedContent: await encryptDuressAlert(deriveDuressKey(circle.seedHex), alert) })
+  }
   const inbox = deriveInbox(circle.seedHex)
   return giftWrap(signer, inbox.pk, inner, inbox.pk)
 }
@@ -273,7 +279,9 @@ function appendSafetyEvent(evt: store.SafetyEvent): boolean {
   let inserted = false
   store.update((p) => {
     if (p.safetyEvents.some((e) => e.id === evt.id)) return
-    p.safetyEvents = [evt, ...p.safetyEvents].slice(0, MAX_SAFETY_EVENTS)
+    const events = [evt, ...p.safetyEvents]
+    const active = events.filter(e => e.kind === 'help' && !e.acknowledgedAt).slice(0, 1000)
+    p.safetyEvents = [...active, ...events.filter(e => e.kind !== 'help' || e.acknowledgedAt).slice(0, MAX_SAFETY_EVENTS)]
     inserted = true
   })
   return inserted
@@ -327,12 +335,12 @@ function recordIncomingEvent(evt: store.SafetyEvent, circle: Circle): void {
     id: evt.id, at: evt.at, kind: ACTIVITY_KIND_FOR_SAFETY[evt.kind], circleId: circle.id, actorPk: evt.from,
     params: { ...(evt.kind === 'pickup' ? { targetPk: evt.from } : {}), ...(evt.geohash ? { geohash: evt.geohash } : {}) },
   })
-  if (shouldNotifyForSafetyEvent(inserted, evt.at, nowSec())) {
+  if (shouldNotifyForEvent(inserted, evt.at, nowSec(), evt.kind === 'help' ? 16 * 86400 : SAFETY_FRESH_SEC)) {
     // ACTIVITY_KIND_FOR_SAFETY's declared type is the wider activity.ActivityKind
     // (shared with the Activity-recording call above); its three actual values
     // here (sos/checkin/pickup-requested) are also notify.ts's own NotifyKind
     // literals, so this narrowing cast is safe.
-    void notify(ACTIVITY_KIND_FOR_SAFETY[evt.kind] as NotifyKind, evt.from, alertTitle(evt, memberName(circle, evt.from)), circle.name)
+    void notify(ACTIVITY_KIND_FOR_SAFETY[evt.kind] as NotifyKind, evt.from, alertTitle(evt, memberName(circle, evt.from)), `${circle.name} · ${ageLabel(evt.at, nowSec())}`)
   }
 }
 
@@ -352,8 +360,7 @@ function recordIncomingEvent(evt: store.SafetyEvent, circle: Circle): void {
  *  once the user answers (the browser's own permission state persists
  *  across reloads — nothing about it is stored in `Persisted`). */
 export function requestNotificationPermission(): void {
-  if (typeof Notification === 'undefined' || Notification.permission !== 'default') return
-  void Notification.requestPermission().then(() => store.notify())
+  void requestAlertPermission()
 }
 
 // ---------------------------------------------------------------------------
@@ -367,23 +374,50 @@ export function requestNotificationPermission(): void {
  *  within a few seconds, else the last known fix, else a location-less
  *  alert — "current fix (or last known)" per the task contract; a denied/
  *  unavailable GPS must never block an SOS from going out. */
+let sendingSos = false
+
 export async function triggerSos(): Promise<void> {
   const p = store.load()
   const self = currentSession()
-  if (!self || !p.circles.length) return
-  const relays = appRelays(p)
-  const fresh = await currentPosition({ enableHighAccuracy: true, maximumAge: 0, timeoutMs: 8000 })
-  const location = helpLocationFrom(fresh ?? beacons.selfFix())
-  const at = nowSec()
-  await Promise.all(p.circles.map(async (circle) => {
-    const wrap = await buildHelpWrap(phoneSigner(), circle, self.identityPk, location)
-    await beacons.publishOrEnqueue(relays, wrap)
-    appendSafetyEvent({
-      id: `local-help-${at}-${circle.id}`, circleId: circle.id, from: self.identityPk, kind: 'help', at,
-      ...(location ? { geohash: location.geohash, precision: location.precision } : {}),
-    })
-    activity.recordActivity({ id: activity.localActivityId('sos', at, circle.id), at, kind: 'sos', circleId: circle.id, actorPk: self.identityPk, params: location ? { geohash: location.geohash } : {} })
-  }))
+  if (!self || !p.circles.length || sendingSos) return
+  p.circles = p.circles.filter(c => !p.settings.removalNotices?.some(n => n.circleId === c.id))
+  if (!p.circles.length) return
+  sendingSos = true
+  const signer = phoneSigner()
+  const at = Math.max(nowSec(), ...p.safetyEvents.filter(e => e.from === self.identityPk && e.kind === 'help').map(e => e.at + 1))
+  const initialFix = beacons.selfFix()
+  const location = helpLocationFrom(initialFix, at)
+  try {
+    await Promise.all(p.circles.map(async circle => {
+      const deliverySession = currentSession()
+
+      const id = `local-help-${crypto.randomUUID()}-${circle.id}`
+      appendSafetyEvent({ id, circleId: circle.id, from: self.identityPk, kind: 'help', at, delivery: 'sending', ...(location ? { geohash: location.geohash, precision: location.precision } : {}) })
+      try {
+        const wrap = await buildHelpWrap(signer, circle, self.identityPk, location, at)
+        if (currentSession() !== self) return
+        const delivery = await beacons.publishOrEnqueue(appRelays(p), wrap, { priority: 'help', circleId: circle.id, help: { memberPk: self.identityPk, location, at }, session: deliverySession, circle })
+        if (currentSession() !== self) return
+        store.update(sp => { const evt = sp.safetyEvents.find(e => e.id === id); if (evt) { evt.delivery = delivery; evt.wrapId = wrap.id } })
+        activity.recordActivity({ id, at, kind: 'sos', circleId: circle.id, actorPk: self.identityPk, params: location ? { geohash: location.geohash } : {} })
+      } catch {
+        if (currentSession() === self) store.update(sp => { const evt = sp.safetyEvents.find(e => e.id === id); if (evt) evt.delivery = 'failed' })
+      }
+    }))
+    // The alert is already sent/queued. A fresh location follows as a
+    // beacon, preserving one SOS identity and one notification per press.
+    void currentPosition({ enableHighAccuracy: true, maximumAge: 0, timeoutMs: 8000 }).then(async fix => {
+      const deliverySession = currentSession()
+
+      if (!fix || nowSec() - fix.at > 90 || currentSession() !== self) return
+      for (const old of p.circles) {
+        const circle = store.load().circles.find(c => c.id === old.id)
+        if (!circle || currentSession() !== self) continue
+        const wrap = await buildPickupAnswerWrap(signer, circle, fix)
+        if (currentSession() === self) await beacons.publishOrEnqueue(appRelays(store.load()), wrap, { priority: 'routine', circleId: circle.id , session: deliverySession, circle })
+      }
+    }).catch(() => {})
+  } finally { sendingSos = false }
 }
 
 /** Check in with every circle: always sends "I'm OK" (flock's own
@@ -398,8 +432,10 @@ export async function triggerCheckin(shareLocation: boolean): Promise<void> {
   const relays = appRelays(p)
   const at = nowSec()
   await Promise.all(p.circles.map(async (circle) => {
+    const deliverySession = currentSession()
+
     const wrap = await buildCheckinWrap(phoneSigner(), circle, self.identityPk, shareLocation, at)
-    await beacons.publishOrEnqueue(relays, wrap)
+    await beacons.publishOrEnqueue(relays, wrap, { session: deliverySession, circle })
     appendSafetyEvent({ id: `local-checkin-${at}-${circle.id}`, circleId: circle.id, from: self.identityPk, kind: 'checkin', at })
     activity.recordActivity({ id: activity.localActivityId('checkin', at, circle.id), at, kind: 'checkin', circleId: circle.id, actorPk: self.identityPk, params: {} })
   }))
@@ -412,6 +448,8 @@ export async function triggerCheckin(shareLocation: boolean): Promise<void> {
  *  Returns the `at` timestamp the findreq used, or null when there's no
  *  signed-in identity/matching circle (nothing to send). */
 async function sendFindreq(circleId: string, targetPk: string): Promise<number | null> {
+  const deliverySession = currentSession()
+
   const p = store.load()
   const self = currentSession()
   const circle = p.circles.find((c) => c.id === circleId)
@@ -419,7 +457,7 @@ async function sendFindreq(circleId: string, targetPk: string): Promise<number |
   const relays = appRelays(p)
   const at = nowSec()
   const wrap = await buildPickupReqWrap(phoneSigner(), circle, self.identityPk, targetPk, at)
-  await beacons.publishOrEnqueue(relays, wrap)
+  await beacons.publishOrEnqueue(relays, wrap, { session: deliverySession, circle })
   appendSafetyEvent({ id: `local-pickup-req-${at}-${circleId}`, circleId, from: targetPk, kind: 'pickup', at })
   activity.recordActivity({ id: activity.localActivityId('pickup-requested', at, circleId), at, kind: 'pickup-requested', circleId, actorPk: self.identityPk, params: { targetPk } })
   return at
@@ -463,20 +501,8 @@ export async function offerPickup(circleId: string, childPk: string): Promise<vo
   await pickup.sendPickupOffer(circleId, childPk)
 }
 
-/** Task 6 (brief §11.4/§11.5): sends the findreq half of the person sheet's
- *  "Request precise location" — the SAME wire and SAME recording as
- *  `requestPickup` above (`sendFindreq`), but with NO role gate: it works in
- *  BOTH directions, a child may request a guardian's precise location just
- *  as a guardian may request a child's (§11.5's "two-way emergency access").
- *  This relies on `autoAnswerPickup` below already answering purely by
- *  "is the request addressed to me" (`ping.target`) — it never inspects who
- *  the requester is or what role they hold, so no change was needed there
- *  for two-way access to already work; verified by inspection, not just
- *  assumed (see that function's own call site in `handleIncomingSignalAsync`).
- *  Returns the findreq's own `at` timestamp (or null if there's no signed-in
- *  identity / `circleId` doesn't resolve) so messages.ts's orchestrator can
- *  stamp a companion reason DM close enough in time to correlate — see
- *  `correlateIncomingFindreq`'s ~2min matching window below. */
+/** Request a precise location and record the ask. Automatic disclosure is
+ * restricted to guardians; a request alone does not grant access. */
 export async function sendPreciseLocationFindreq(circleId: string, targetPk: string): Promise<number | null> {
   const p = store.load()
   if (!currentSession() || !p.circles.find((c) => c.id === circleId)) return null
@@ -489,12 +515,16 @@ export async function sendPreciseLocationFindreq(circleId: string, targetPk: str
  *  nothing to disclose and this silently no-ops, same discipline as
  *  beacons.ts's own routine emit loop. */
 async function autoAnswerPickup(circle: Circle, selfPk: string): Promise<void> {
+  const deliverySession = currentSession()
+
   const relays = appRelays(store.load())
   const fresh = await currentPosition({ enableHighAccuracy: true, maximumAge: 0, timeoutMs: 8000 })
   const fix = fresh ?? beacons.selfFix()
-  if (!fix) return
+  if (!fix || nowSec() - fix.at > 90 || fix.at > nowSec() + 10 || currentSession()?.identityPk !== selfPk) return
+  const liveCircle = store.load().circles.find(c => c.id === circle.id)
+  if (!liveCircle || liveCircle.seedHex !== circle.seedHex) return
   const wrap = await buildPickupAnswerWrap(phoneSigner(), circle, fix)
-  await beacons.publishOrEnqueue(relays, wrap)
+  await beacons.publishOrEnqueue(relays, wrap, { session: deliverySession, circle })
   // Send side records the child's OWN action of complying — the answer
   // itself is a plain beacon on the wire (see this function's doc comment),
   // so there is no separate receive-side signal for a guardian's device to
@@ -712,7 +742,7 @@ async function handleIncomingSignalAsync(circle: Circle, rumor: Rumor, t: string
     const alert = await decodeHelp(rumor, circle.seedHex)
     if (!alert) return
     recordIncomingEvent({
-      id, circleId: circle.id, from: sender.memberPk, kind: 'help', at: alert.timestamp,
+      id: `help-${circle.id}-${sender.memberPk}-${alert.timestamp}`, circleId: circle.id, from: sender.memberPk, kind: 'help', at: alert.timestamp,
       ...(alert.geohash ? { geohash: alert.geohash, precision: alert.precision } : {}),
     }, circle)
     return
@@ -743,8 +773,8 @@ async function handleIncomingSignalAsync(circle: Circle, rumor: Rumor, t: string
     // that the asker re-asks (repeatable, rate-limited); the cost of
     // answering a stale one is an unwanted location reveal. The log +
     // reason-correlation above stay ungated — state records, actions gate.
-    const live = nowSec() - ping.timestamp <= FIND_PING_FRESH_SEC
-    if (live && self && self.identityPk === ping.target) void autoAnswerPickup(circle, self.identityPk)
+    const live = ping.timestamp <= nowSec() + 10 && nowSec() - ping.timestamp <= FIND_PING_FRESH_SEC
+    if (live && self && self.identityPk === ping.target && isGuardian(circle, sender.memberPk)) void autoAnswerPickup(circle, self.identityPk)
     return
   }
   // Any other `t` (breach, cover, flock's self-triggered `pickup`, a future
@@ -759,6 +789,8 @@ let registered = false
 export function ensure(): void {
   if (registered) return
   registered = true
+  void refreshAlertPermission()
+  if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void refreshAlertPermission() })
   beacons.setSignalHandler(handleIncomingSignal)
 }
 
@@ -776,6 +808,7 @@ export function ensure(): void {
  *  marker, so `wireSos` (below) wires whichever of them — one, both, or
  *  neither — the active tab actually rendered. */
 export function sosButtonView(): string {
+  if (!currentSession() || !store.load().circles.length) return ''
   return `
     <button type="button" class="sos-button" data-sos-hold="1">Hold for SOS</button>
     <p class="muted small">Press and hold for ${(SOS_HOLD_MS / 1000).toFixed(1)}s to alert every circle.</p>
@@ -820,9 +853,19 @@ function pickupView(p: store.Persisted, fam: SessionInfo): string {
   return `<section class="contact-group"><h2>Pickup</h2><ul class="contact-list">${rows.join('')}</ul></section>`
 }
 
-function notificationsView(): string {
-  if (typeof Notification === 'undefined' || Notification.permission !== 'default') return ''
-  return `<button type="button" data-action="safety-enable-notifications">Enable alert notifications</button>`
+function notificationsView(): string { return alertPermissionView() }
+
+/** Remains visible on every tab until this device explicitly acknowledges. */
+export function activeAlertsView(p: store.Persisted): string {
+  const self = currentSession()
+  const help = p.safetyEvents.filter(e => e.kind === 'help' && e.from !== self?.identityPk && !e.acknowledgedAt)
+  const outgoing = p.safetyEvents.filter(e => e.kind === 'help' && e.from === self?.identityPk && e.delivery && nowSec() - e.at < 86400)
+  const labels = { sending: 'Sending SOS…', sent: 'SOS accepted by a relay. A guardian has not confirmed seeing it.', queued: 'SOS not yet sent. Retrying when a relay is reachable.', failed: 'SOS could not be saved for retry. Try again.' }
+  const removals = (p.settings.removalNotices ?? []).map(n => `<aside role="alert">You were removed from ${esc(n.name)}. Your location and SOS no longer reach that circle.</aside>`).join('')
+  return alertPermissionView() + removals + help.map(e => {
+    const circle = p.circles.find(c => c.id === e.circleId)
+    return `<aside role="alert" class="sos-alert"><strong>${esc(alertTitle(e, circle ? memberName(circle, e.from) : shortPk(e.from)))}</strong> · ${ageLabel(e.at, nowSec())}<button type="button" data-action="safety-acknowledge" data-id="${esc(e.id)}">I've seen this</button></aside>`
+  }).join('') + outgoing.slice(0, p.circles.length).map(e => `<p role="status">${esc(labels[e.delivery!])}</p>`).join('')
 }
 
 function alertsView(p: store.Persisted): string {
@@ -858,6 +901,9 @@ const esc = (s: string): string =>
 
 export function handleAction(action: string, node: HTMLElement): void {
   switch (action) {
+    case 'safety-acknowledge':
+      store.update(p => { const e = p.safetyEvents.find(e => e.id === node.dataset.id); if (e) e.acknowledgedAt = nowSec() })
+      break
     case 'safety-checkin': {
       const shareLocation = (document.getElementById('checkin-share-location') as HTMLInputElement | null)?.checked ?? false
       void triggerCheckin(shareLocation)
@@ -893,10 +939,14 @@ export function wireSos(root: HTMLElement): void {
       el.classList.remove('pressing')
       if (timer !== null) { clearTimeout(timer); timer = null }
     }
+    el.addEventListener('click', (ev) => {
+      if (ev.detail === 0 && window.confirm('Send an SOS to every circle?')) void triggerSos()
+    })
     el.addEventListener('pointerdown', (ev) => {
+      cancel()
       ev.preventDefault()
       el.classList.add('pressing')
-      timer = setTimeout(() => { cancel(); void triggerSos() }, SOS_HOLD_MS)
+      timer = setTimeout(() => { const connected = el.isConnected; cancel(); if (connected) void triggerSos() }, SOS_HOLD_MS)
     })
     el.addEventListener('pointerup', cancel)
     el.addEventListener('pointercancel', cancel)

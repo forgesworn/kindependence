@@ -32,6 +32,8 @@ import {
   buildPlacesFencesWrap,
   buildPlacesMetaPayload,
   savePlaces,
+  addPlace,
+  deletePlace,
   parsePlacesMetaSignal,
   PLACES_SIGNAL_TYPE,
   handleIncomingSignal,
@@ -377,14 +379,14 @@ describe('evaluatePlaces — pure escalation state machine', () => {
     expect(result.escalationEffect).toEqual({ kind: 'warn', placeName: 'A', graceMinutes: 15 })
   })
 
-  it('a confidently-uncertain fix (accuracy straddling the fence edge) holds the current phase, but still updates raw entered/exited', () => {
+  it('a confidently-uncertain fix (accuracy straddling the fence edge) holds the current phase, and does not invent an arrival', () => {
     const place = fakePlace({ radiusMetres: 100 })
     // Exactly at the centre, but with an accuracy disc (200m) wider than the
     // fence itself — classifyContainment can assert neither "wholly inside"
     // nor "wholly outside" (see geofence.ts's own doc comment).
     const result = evaluatePlaces([place], place.centre, 200, 1000, INITIAL_PLACE_EVAL_STATE, true)
     expect(result.state.escalation).toEqual({ phase: 'safe' }) // unchanged, not advanced
-    expect(result.entered).toEqual(['place-1']) // raw geometry is accuracy-independent
+    expect(result.entered).toEqual([]) // uncertain readings cannot confirm an arrival
   })
 
   it('with no prior "inside" recorded (e.g. app cold-starts already outside), a fresh exit falls back to treating every configured place as relevant', () => {
@@ -979,6 +981,22 @@ describe('savePlaces — structural enqueue (Task 9 fix round 1, finding 7)', ()
     expect(JSON.parse(queued?.payload ?? 'null')).toMatchObject({ t: PLACES_SIGNAL_TYPE, circleId: circle.id, by: PK_GUARDIAN })
   })
 
+  it('preserves consecutive edits while the previous full place set awaits signing', async () => {
+    const circle = fakeCircle()
+    signIn(PK_GUARDIAN, toHex(generateSecretKey()), false)
+    store.save({ ...store.load(), circles: [circle] })
+    await savePlaces(circle.id, [fakePlace({ id: 'first', name: 'School' })])
+    const { id: _id, ...draft } = fakePlace({ name: 'Library' })
+    await addPlace(circle.id, draft)
+    const added = JSON.parse(queue.pending().filter(q => q.action === 'places').at(-1)!.payload)
+    expect(added.places.map((p: Place) => p.name)).toEqual(['School', 'Library'])
+    const revisions = queue.pending().filter(q => q.action === 'places').map(q => JSON.parse(q.payload).updatedAt)
+    expect(revisions[1]).toBeGreaterThan(revisions[0])
+    await deletePlace(circle.id, 'first')
+    const deleted = JSON.parse(queue.pending().filter(q => q.action === 'places').at(-1)!.payload)
+    expect(deleted.places.map((p: Place) => p.name)).toEqual(['Library'])
+  })
+
   it('no-ops for a non-guardian device — nothing persisted, nothing enqueued', async () => {
     const other = 'c'.repeat(64)
     const circle = fakeCircle() // `other` is not a member at all
@@ -1278,7 +1296,7 @@ describe('tick() orchestration (final review C1 + I1)', () => {
     vi.mocked(beacons.selfFix).mockReset()
     vi.mocked(beacons.selfFix).mockReturnValue(null)
     vi.mocked(beacons.publishOrEnqueue).mockReset()
-    vi.mocked(beacons.publishOrEnqueue).mockResolvedValue(undefined)
+    vi.mocked(beacons.publishOrEnqueue).mockResolvedValue('sent')
     vi.mocked(notify).mockClear()
   })
 
@@ -1410,7 +1428,7 @@ describe('ensureBreachSent in-flight guard (re-review Minor: "no in-flight guard
     // test still resolves (and fails on the call-count assertion) instead of
     // hanging forever on an unresolved first promise.
     const resolvers: Array<() => void> = []
-    vi.mocked(beacons.publishOrEnqueue).mockImplementation(() => new Promise((resolve) => { resolvers.push(resolve) }))
+    vi.mocked(beacons.publishOrEnqueue).mockImplementation(() => new Promise((resolve) => { resolvers.push(() => resolve('sent')) }))
 
     // First tick: escalates this tick (grace deadline already past) and
     // starts sending the breach signal — which hangs inside publishOrEnqueue.
@@ -1446,6 +1464,7 @@ describe('ensureBreachSent in-flight guard (re-review Minor: "no in-flight guard
 // ---------------------------------------------------------------------------
 
 describe('tick() — arrival window evaluation (Phase 3 Task 5)', () => {
+  beforeEach(() => { vi.mocked(beacons.selfFix).mockReturnValue({ lat: 0, lon: 0, accuracy: 5, at: Math.floor(Date.now() / 1000) }) })
   afterEach(() => {
     vi.useRealTimers()
   })
@@ -1967,7 +1986,7 @@ describe('places.ensure() integration (Task 5) — local policy allow/prompt/den
     vi.mocked(beacons.selfFix).mockReset()
     vi.mocked(beacons.selfFix).mockReturnValue(null)
     vi.mocked(beacons.publishOrEnqueue).mockReset()
-    vi.mocked(beacons.publishOrEnqueue).mockResolvedValue(undefined)
+    vi.mocked(beacons.publishOrEnqueue).mockResolvedValue('sent')
     vi.mocked(notify).mockClear()
   })
 
@@ -1999,7 +2018,7 @@ describe('places.ensure() integration (Task 5) — local policy allow/prompt/den
     const resolved = store.load().approvals.find((r) => r.req.id === 'req-allow')?.resolved
     expect(resolved?.ok).toBe(true)
     const leaveEntries = store.load().approvedLeaves[circleId]
-    expect(leaveEntries).toEqual([{ placeId: 'place-allow', until: (resolved?.at ?? 0) + 30 * 60 }])
+    expect(leaveEntries).toEqual([{ memberPk: 'c'.repeat(64), placeId: 'place-allow', until: (resolved?.at ?? 0) + 30 * 60 }])
     expect(store.load().activity.some((e) => e.kind === 'leave-approved' && e.circleId === circleId)).toBe(true)
   })
 
@@ -2157,7 +2176,7 @@ describe('places.ensure() integration (Task 5) — local policy allow/prompt/den
       store.update((p) => {
         p.circles = [circle]
         p.places = { [circleId]: [place] }
-        p.approvedLeaves = { [circleId]: [{ placeId: 'place-expiry', until: t0 + 1800 }] }
+        p.approvedLeaves = { [circleId]: [{ memberPk: child.pkHex, placeId: 'place-expiry', until: t0 + 1800 }] }
       })
 
       const outside = northOf(place.centre, 500)

@@ -432,6 +432,8 @@ let started = false
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 async function poll(): Promise<void> {
+  const deliverySession = currentSession()
+
   const p = store.load()
   const self = currentSession()
   if (!self) return
@@ -443,7 +445,7 @@ async function poll(): Promise<void> {
     if (!effectiveShareBattery(p.settings, circle, self.identityPk)) continue
     if (!shouldSendBattery(emitMemory.get(circle.id), reading)) continue
     const wrap = await buildBatteryWrap(phoneSigner(), self.identityPk, circle, reading)
-    await beacons.publishOrEnqueue(relays, wrap)
+    await beacons.publishOrEnqueue(relays, wrap, { session: deliverySession, circle })
     emitMemory.set(circle.id, { pct: reading.pct, charging: reading.charging, at: reading.at })
   }
 }

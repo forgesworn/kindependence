@@ -12,5 +12,6 @@ export default defineConfig({
   test: {
     environment: 'node',
     passWithNoTests: true,
+    coverage: { provider: 'v8', reporter: ['text-summary', 'json-summary'], reportsDirectory: 'coverage' },
   },
 })

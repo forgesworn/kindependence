@@ -150,7 +150,7 @@ export function upsertProposedAgreement(records: store.AgreementRecord[], agreem
  *  never re-applies once it's left that state. */
 export function applyAgreementAck(records: store.AgreementRecord[], ack: AgreementAck): store.AgreementRecord[] {
   return records.map((r) => {
-    if (r.agreement.id !== ack.id || r.status !== 'proposed') return r
+    if (r.agreement.id !== ack.id || ack.by !== r.agreement.child || r.status !== 'proposed') return r
     return { ...r, status: 'acked' }
   })
 }
@@ -179,7 +179,7 @@ const STATUS_RANK: Record<store.AgreementLifecycleStatus, number> = {
  *  dropped rather than regressing the record. */
 export function applyAgreementStatus(records: store.AgreementRecord[], sig: AgreementStatus): store.AgreementRecord[] {
   return records.map((r) => {
-    if (r.agreement.id !== sig.id || r.status === 'arrived') return r
+    if (r.agreement.id !== sig.id || sig.by !== r.agreement.child || r.status === 'arrived') return r
     if (sig.status === 'arrived') return { ...r, status: 'arrived', arrivedAt: sig.at }
     if (STATUS_RANK[sig.status] < STATUS_RANK[r.status]) return r
     return { ...r, status: sig.status }
@@ -195,7 +195,7 @@ export function applyAgreementStatus(records: store.AgreementRecord[], sig: Agre
  *  request queue in v1). */
 export function applyExtendReq(records: store.AgreementRecord[], req: ExtendReq): store.AgreementRecord[] {
   return records.map((r) =>
-    r.agreement.id === req.id
+    r.agreement.id === req.id && req.by === r.agreement.child
       ? { ...r, pendingExtend: { id: req.id, extraMin: req.extraMin, by: req.by, at: req.at } }
       : r,
   )
@@ -572,6 +572,8 @@ function findRecordAndCircle(agreementId: string): { self: SessionInfo; record: 
 
 /** Child-only: acknowledges an agreement proposed to them. */
 export async function ackAgreement(agreementId: string): Promise<void> {
+  const deliverySession = currentSession()
+
   const ctx = findRecordAndCircle(agreementId)
   if (!ctx) return
   const { self, circle, p } = ctx
@@ -580,7 +582,7 @@ export async function ackAgreement(agreementId: string): Promise<void> {
   updateAgreements((records) => applyAgreementAck(records, ack))
   activity.recordActivity({ id: `local-agreement-acked-${agreementId}`, at, kind: 'agreement-acked', circleId: circle.id, actorPk: self.identityPk, params: {} })
   const wrap = await buildAgreementAckWrap(phoneSigner(), circle, ack)
-  await beacons.publishOrEnqueue(appRelays(p), wrap)
+  await beacons.publishOrEnqueue(appRelays(p), wrap, { session: deliverySession, circle })
 }
 
 /** Reports lifecycle progress against an agreement — "On my way" (`en-
@@ -591,6 +593,8 @@ export async function ackAgreement(agreementId: string): Promise<void> {
  *  the safety/agreement wire, which stops at "shaped like the right
  *  pubkey/id," not "is this the right role" (see BROOD.md §7.3). */
 export async function sendAgreementStatus(agreementId: string, status: AgreementStatusKind): Promise<void> {
+  const deliverySession = currentSession()
+
   const ctx = findRecordAndCircle(agreementId)
   if (!ctx) return
   const { self, circle, p } = ctx
@@ -600,12 +604,14 @@ export async function sendAgreementStatus(agreementId: string, status: Agreement
   clearLeaveBanner(agreementId, status)
   activity.recordActivity({ id: `local-agreement-status-${agreementId}-${status}`, at, kind: 'agreement-status', circleId: circle.id, actorPk: self.identityPk, params: { status } })
   const wrap = await buildAgreementStatusWrap(phoneSigner(), circle, sig)
-  await beacons.publishOrEnqueue(appRelays(p), wrap)
+  await beacons.publishOrEnqueue(appRelays(p), wrap, { session: deliverySession, circle })
 }
 
 /** Requests pushing an agreement's deadline out by `extraMin` minutes — the
  *  +15/+30 chips. */
 export async function requestExtend(agreementId: string, extraMin: number): Promise<void> {
+  const deliverySession = currentSession()
+
   const ctx = findRecordAndCircle(agreementId)
   if (!ctx) return
   const { self, circle, p } = ctx
@@ -614,7 +620,7 @@ export async function requestExtend(agreementId: string, extraMin: number): Prom
   updateAgreements((records) => applyExtendReq(records, req))
   activity.recordActivity({ id: `local-agreement-extend-req-${agreementId}-${at}`, at, kind: 'agreement-extended', circleId: circle.id, actorPk: self.identityPk, params: { stage: 'requested', extraMin: String(extraMin) } })
   const wrap = await buildExtendReqWrap(phoneSigner(), circle, req)
-  await beacons.publishOrEnqueue(appRelays(p), wrap)
+  await beacons.publishOrEnqueue(appRelays(p), wrap, { session: deliverySession, circle })
 }
 
 /** Guardian-only: approves or denies a pending `extend-req`. Identity-signed
@@ -972,6 +978,11 @@ export function handleIncomingSignal(circle: Circle, rumor: Rumor, t: string, se
   if (self && sender.signerPk === self.phonePk) return
   const signal = decodeBroodSignal(rumor, sender)
   if (!signal) return
+  if ('at' in signal && signal.at > nowSec() + 600) return
+  if (signal.t === 'agreement-ack' || signal.t === 'agreement-status' || signal.t === 'extend-req') {
+    const tracked = store.load().agreements.find(r => r.agreement.id === signal.id)
+    if (!tracked || tracked.agreement.circleId !== circle.id || tracked.agreement.child !== sender.memberPk) return
+  }
   // Receive side records the peer's action (task contract) — one id per
   // wire event (the rumor's own, or its synthetic fallback, same idiom as
   // safety.ts's own receive path), reused for whichever kind fires below.

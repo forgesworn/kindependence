@@ -52,7 +52,7 @@ function linkPair(g: Key, d: Key, at: number, dAt = at) {
 function circle(id: string, memberPks: string[]): Circle {
   const c: Circle = {
     id, name: 'Test circle', seedHex: '1'.repeat(64), epoch: 0,
-    members: memberPks.map((pk, i) => ({ pk, role: i === 0 ? 'guardian' : 'dependant', name: `M${i}` })) as Circle['members'],
+    members: memberPks.map((pk, i) => ({ pk, role: i === 0 ? 'guardian' : 'child', name: `M${i}` })) as Circle['members'],
     createdAt: 100, configUpdatedAt: 100, configBy: memberPks[0] ?? '',
   }
   store.update((p) => { p.circles = [...p.circles.filter((x) => x.id !== id), c] })

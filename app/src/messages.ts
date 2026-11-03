@@ -346,8 +346,8 @@ export function capCircleChatText(text: string): string {
  *  is sent from within a 1:1 DM (see the module doc comment). `at` is the
  *  caller's own timestamp (not read from the clock again in here) so it can't
  *  drift from whatever the caller stamps its own local bookkeeping with. */
-export async function buildKindependenceMsgWrap(signer: Signer, circle: Circle, fromPk: string, reason: string, target: string | undefined, at: number): Promise<SignedEvent> {
-  const inner = await buildKindependenceMsgSignal({ groupId: circle.id, seedHex: circle.seedHex, from: fromPk, reason, timestamp: at, ...(target ? { target } : {}) })
+export async function buildKindependenceMsgWrap(signer: Signer, circle: Circle, fromPk: string, reason: string, target: string | undefined, at: number, messageKind: 'chat' | 'signal' = 'signal'): Promise<SignedEvent> {
+  const inner = await buildKindependenceMsgSignal({ groupId: circle.id, seedHex: circle.seedHex, from: fromPk, reason, messageKind, timestamp: at, ...(target ? { target } : {}) })
   const inbox = deriveInbox(circle.seedHex)
   return giftWrap(signer, inbox.pk, inner, inbox.pk)
 }
@@ -890,8 +890,10 @@ async function sendDmToMember(circleId: string, memberPk: string, payload: { cir
   const relays = appRelays(store.load())
   const phones = phonesOf(circleId, memberPk)
   await Promise.all(phones.map(async (phonePk) => {
+    const deliverySession = currentSession()
+
     const wrap = await buildDmWrap(phoneSigner(), phonePk, payload)
-    await beacons.publishOrEnqueue(relays, wrap)
+    await beacons.publishOrEnqueue(relays, wrap, { session: deliverySession, personal: true, recipientPhonePk: phonePk })
   }))
 }
 
@@ -900,9 +902,11 @@ async function sendDmToMember(circleId: string, memberPk: string, payload: { cir
  *  wrapper around `buildKindependenceMsgWrap`, mirroring beacons.ts's own
  *  `publishOrEnqueue` contract (never throws; offline falls over to the
  *  shared outbox). */
-async function publishCircleBuzz(selfPk: string, circle: Circle, reason: string, target: string | undefined, at: number): Promise<void> {
-  const wrap = await buildKindependenceMsgWrap(phoneSigner(), circle, selfPk, reason, target, at)
-  await beacons.publishOrEnqueue(appRelays(store.load()), wrap)
+async function publishCircleBuzz(selfPk: string, circle: Circle, reason: string, target: string | undefined, at: number, messageKind: 'chat' | 'signal' = 'signal'): Promise<void> {
+  const deliverySession = currentSession()
+
+  const wrap = await buildKindependenceMsgWrap(phoneSigner(), circle, selfPk, reason, target, at, messageKind)
+  await beacons.publishOrEnqueue(appRelays(store.load()), wrap, { session: deliverySession, circle })
 }
 
 /** Sends `text` in the currently open thread. `structured` set means this IS
@@ -958,7 +962,7 @@ async function sendText(text: string, structured?: StructuredDmKind): Promise<vo
     const reason = capCircleChatText(trimmed)
     insertLocalCircleChatLine(thread.circleId, self.identityPk, reason, at, structured)
     if (structured) recordStructuredActivity(at, thread.circleId, self.identityPk, structured)
-    await publishCircleBuzz(self.identityPk, circle, reason, undefined, at)
+    await publishCircleBuzz(self.identityPk, circle, reason, undefined, at, structured ? 'signal' : 'chat')
   }
 }
 
@@ -1035,10 +1039,12 @@ async function sendBuzzChip(kind: BuzzChipKind): Promise<void> {
  *  coordination action (untargeted `t:'buzz'`) — the impure
  *  publish-with-outbox-fallback wrapper, mirroring `publishCircleBuzz`. */
 async function publishOnMyWay(selfPk: string, circle: Circle, at: number): Promise<void> {
+  const deliverySession = currentSession()
+
   const inner = await buildBuzzSignal({ groupId: circle.id, seedHex: circle.seedHex, from: selfPk, action: 'on_my_way', timestamp: at })
   const inbox = deriveInbox(circle.seedHex)
   const wrap = await giftWrap(phoneSigner(), inbox.pk, inner, inbox.pk)
-  await beacons.publishOrEnqueue(appRelays(store.load()), wrap)
+  await beacons.publishOrEnqueue(appRelays(store.load()), wrap, { session: deliverySession, circle })
 }
 
 /** Opens agreements.ts's "new agreement" form, prefilled with the current
@@ -1177,7 +1183,7 @@ async function handleIncomingKindependenceMsg(circle: Circle, rumor: Rumor, send
   // sender, else the content is lying about who sent it — drop it wholesale
   // (the same binding safety.ts applies to findping.from).
   if (msg.from !== sender.memberPk) return
-  await dispatchDecodedBuzz(circle, rumor, msg.reason, msg.target, msg.timestamp, sender)
+  await dispatchDecodedBuzz(circle, rumor, msg.reason, msg.target, msg.timestamp, sender, msg.messageKind)
 }
 
 /** `t:'buzz'` receive — flock's coordination-action wire. Try the NEW
@@ -1234,7 +1240,7 @@ async function handleIncomingBuzz(circle: Circle, rumor: Rumor, sender: beacons.
   // mismatch, same as every other path, so no future consumer of this
   // decoded value can end up trusting an unbound field.
   if (legacy.from !== sender.memberPk) return
-  await dispatchDecodedBuzz(circle, rumor, legacy.reason, legacy.target, legacy.timestamp, sender)
+  await dispatchDecodedBuzz(circle, rumor, legacy.reason, legacy.target, legacy.timestamp, sender, legacy.messageKind)
 }
 
 /** Maps a NEW flock fixed-action coordination buzz onto kindependence's existing
@@ -1287,8 +1293,8 @@ async function handleActionBuzz(circle: Circle, rumor: Rumor, buzz: Buzz, sender
  *  buzz mapped by `handleActionBuzz`, or a legacy `t:'buzz'`) carried it —
  *  REUSED verbatim across the Phase 7 migration; its inputs are now passed in
  *  rather than read off a single decoded object. */
-async function dispatchDecodedBuzz(circle: Circle, rumor: Rumor, reason: string, target: string | undefined, timestamp: number, sender: beacons.Sender): Promise<void> {
-  const classification = classifyIncomingBuzz(reason, target)
+async function dispatchDecodedBuzz(circle: Circle, rumor: Rumor, reason: string, target: string | undefined, timestamp: number, sender: beacons.Sender, messageKind?: 'chat' | 'signal'): Promise<void> {
+  const classification = messageKind === 'chat' ? { chatLine: target === undefined } : classifyIncomingBuzz(reason, target)
   if (classification.chatLine) {
     const msg: store.ChatMessage = {
       id: rumor.id ?? `buzz-${sender.memberPk}-${timestamp}`, from: sender.memberPk, text: reason, at: timestamp,

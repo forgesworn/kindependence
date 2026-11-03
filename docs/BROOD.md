@@ -206,3 +206,20 @@ anything on the safety path — see §7.1.
    `t` tag that disagrees with the decoded payload's own `t` field — as
    "not mine" (`null`) rather than throwing. The same tolerance FLOCK
    extends to unknown or future `t` values it hasn't been taught yet.
+
+
+### Kindependence transport and authority
+
+The app carries `agreement`, `extend-resp`, `family-policy` and `approval-resp`
+as identity-signed structural events. A bound device gift-wraps a kind-20078
+rumor with `t:struct`, containing the signed event as JSON. The signed event
+binds the action, circle and previous seed hash. Sending a bare phone-signed
+copy of these actions does not apply them. The structural queue retains an
+operation until a relay accepts its wrap and can wrap it again after rotation.
+
+Acknowledgements, progress and extension requests must come from the agreement's
+named dependant on its own circle. Pickup transitions are checked against the
+authenticated sender's circle role, party and permitted transition. Circle chat
+has an explicit `messageKind:chat` discriminator; module-generated messages can
+carry structured actions. Legacy free-text reception remains supported during
+mixed-version use.

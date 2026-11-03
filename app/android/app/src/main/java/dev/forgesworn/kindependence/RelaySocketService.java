@@ -17,6 +17,7 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
+import android.app.PendingIntent;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.os.Build;
@@ -67,6 +68,16 @@ public class RelaySocketService extends Service {
     return START_NOT_STICKY;
   }
 
+  @Override public void onTaskRemoved(Intent rootIntent) {
+    Notification.Builder builder = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(this, CHANNEL_ID) : new Notification.Builder(this);
+    builder.setContentTitle("Open Kindependence to resume sharing")
+      .setContentText("The app was closed. Location updates may have stopped.")
+      .setSmallIcon(R.drawable.ic_stat_kindependence)
+      .setContentIntent(PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class), PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE));
+    getSystemService(NotificationManager.class).notify(NOTIFICATION_ID, builder.build());
+    super.onTaskRemoved(rootIntent);
+  }
+
   private Notification buildNotification() {
     Notification.Builder builder;
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -77,6 +88,7 @@ public class RelaySocketService extends Service {
     builder
       .setContentTitle(getString(R.string.relay_service_channel))
       .setContentText(getString(R.string.relay_service_text))
+      .setContentIntent(PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class), PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE))
       .setSmallIcon(R.drawable.ic_stat_kindependence)
       .setOngoing(true);
     return builder.build();

@@ -290,10 +290,12 @@ function recordJourneyDoneActivity(circleId: string, journeyId: string, actorPk:
 }
 
 async function sendJourneyBuzz(fromPk: string, circle: Circle, reason: string, at: number): Promise<void> {
+  const deliverySession = currentSession()
+
   const inner = await buildKindependenceMsgSignal({ groupId: circle.id, seedHex: circle.seedHex, from: fromPk, reason, timestamp: at })
   const inbox = deriveInbox(circle.seedHex)
   const wrap: SignedEvent = await giftWrap(phoneSigner(), inbox.pk, inner, inbox.pk)
-  await beacons.publishOrEnqueue(appRelays(store.load()), wrap)
+  await beacons.publishOrEnqueue(appRelays(store.load()), wrap, { session: deliverySession, circle })
 }
 
 // ---------------------------------------------------------------------------

@@ -52,6 +52,8 @@ export interface LegacyBuzz {
   timestamp: number
   /** Optional roll-call ask, only ever `'location'`; unknown values are dropped. */
   ask?: 'location'
+  /** Only module-generated messages may drive structured actions. */
+  messageKind?: 'chat' | 'signal'
 }
 
 function validateReason(reason: string): string {
@@ -77,6 +79,8 @@ export async function buildKindependenceMsgSignal(params: {
   target?: string
   timestamp?: number
   ask?: 'location'
+  /** Only module-generated messages may drive structured actions. */
+  messageKind?: 'chat' | 'signal'
 }): Promise<UnsignedEvent> {
   if (!HEX_64_RE.test(params.from)) throw new Error('from must be a 64-character lowercase hex pubkey')
   if (params.target !== undefined && !HEX_64_RE.test(params.target)) {
@@ -89,6 +93,7 @@ export async function buildKindependenceMsgSignal(params: {
   const payload: LegacyBuzz = {
     from: params.from,
     reason,
+    ...(params.messageKind ? { messageKind: params.messageKind } : {}),
     timestamp: params.timestamp ?? Math.floor(Date.now() / 1000),
     ...(params.target !== undefined && { target: params.target }),
     ...(params.ask !== undefined && { ask: params.ask }),
@@ -127,6 +132,7 @@ export async function decodeLegacyBuzz(seedHex: string, content: string): Promis
   return {
     from: o.from,
     reason: o.reason,
+    ...(o.messageKind === 'chat' || o.messageKind === 'signal' ? { messageKind: o.messageKind } : {}),
     timestamp: o.timestamp,
     ...(typeof o.target === 'string' && { target: o.target }),
     // Unknown ask values are DROPPED, not fatal — a future ask kind must not

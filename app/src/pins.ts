@@ -140,7 +140,7 @@ export interface Pin {
 
 const HEX_64_RE = /^[0-9a-f]{64}$/
 const ID_RE = /^[0-9a-f]{8,32}$/
-const GEOHASH_RE = /^[0-9a-z]{1,12}$/
+const GEOHASH_RE = /^[0123456789bcdefghjkmnpqrstuvwxyz]{1,12}$/
 
 /** Build an encrypted, unsigned kind-20078 pin signal (drop or removal) —
  *  flock's `buildPinSignal`, verbatim (same validation, same field order,
@@ -330,6 +330,8 @@ function landPin(circleId: string, pin: Pin): boolean {
 // ---------------------------------------------------------------------------
 
 async function publishPin(circleId: string, pin: Pin): Promise<void> {
+  const deliverySession = currentSession()
+
   const p = store.load()
   const self = currentSession()
   const circle = p.circles.find((c) => c.id === circleId)
@@ -337,7 +339,7 @@ async function publishPin(circleId: string, pin: Pin): Promise<void> {
   const inner = await buildPinSignal({ groupId: circle.id, seedHex: circle.seedHex, ...pin })
   const inbox = deriveInbox(circle.seedHex)
   const wrap: SignedEvent = await giftWrap(phoneSigner(), inbox.pk, inner, inbox.pk)
-  await beacons.publishOrEnqueue(appRelays(p), wrap)
+  await beacons.publishOrEnqueue(appRelays(p), wrap, { session: deliverySession, circle })
 }
 
 /** Drops a pin of `kind` at `centre` for `circleId` — any signed-in member

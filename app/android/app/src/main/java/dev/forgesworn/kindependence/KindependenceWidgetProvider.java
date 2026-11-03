@@ -56,7 +56,7 @@ public class KindependenceWidgetProvider extends AppWidgetProvider {
       }
     }
 
-    if (rows == null) {
+    if (rows == null || rows.length() == 0) {
       views.setTextViewText(NAME_IDS[0], "Open kindependence to set up");
       views.setViewVisibility(NAME_IDS[0], View.VISIBLE);
       views.setViewVisibility(LINE_IDS[0], View.GONE);
@@ -77,6 +77,10 @@ public class KindependenceWidgetProvider extends AppWidgetProvider {
         String name = row != null ? row.optString("name", "") : "";
         String line1 = row != null ? row.optString("line1", "") : "";
         String line2 = row != null ? row.optString("line2", null) : null;
+        if (pushedAt <= 0 || System.currentTimeMillis() - pushedAt >= FRESH_MS) {
+          line1 = "Open kindependence for a current update";
+          line2 = null;
+        }
         String line = (line2 != null && line2.length() > 0) ? line1 + "\n" + line2 : line1;
         views.setTextViewText(NAME_IDS[i], name);
         views.setTextViewText(LINE_IDS[i], line);

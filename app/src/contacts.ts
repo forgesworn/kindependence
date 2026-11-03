@@ -6,8 +6,7 @@
 // calls `setContactsSource`, and the fake in test-support/fake-contacts.ts
 // is what every other module's tests drive instead.
 //
-// Design (internal design record: 2026-09-25-kindependence-contacts-circles-
-// design.md §2, §6): the only source of contacts is the grant. Kindependence
+// The only source of contacts is the grant. Kindependence
 // enforces its own "usable" rule (kin, kith, or a guardian link) on top of
 // whatever tiers the grant reports — kens are never usable, and a missing
 // tier is not usable either ("absence is not Ken": a contact the grant

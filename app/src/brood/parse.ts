@@ -68,7 +68,7 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 }
 
 function parseSchedule(v: unknown): PrecisionStep[] | null {
-  if (!Array.isArray(v)) return null
+  if (!Array.isArray(v) || v.length > 32) return null
   const steps: PrecisionStep[] = []
   for (const item of v) {
     if (!isPlainObject(item)) return null
@@ -81,8 +81,8 @@ function parseSchedule(v: unknown): PrecisionStep[] | null {
 
 function parsePlace(v: unknown): { label: string; geohash?: string } | null {
   if (!isPlainObject(v)) return null
-  if (!isNonEmptyString(v.label)) return null
-  if (v.geohash !== undefined && !isNonEmptyString(v.geohash)) return null
+  if (!isNonEmptyString(v.label) || v.label.length > 120) return null
+  if (v.geohash !== undefined && (typeof v.geohash !== 'string' || !/^[0123456789bcdefghjkmnpqrstuvwxyz]{1,12}$/.test(v.geohash))) return null
   return v.geohash === undefined ? { label: v.label } : { label: v.label, geohash: v.geohash }
 }
 
@@ -99,9 +99,10 @@ function parseRules(v: unknown): Partial<Record<PolicyAction, PolicyVerdict>> | 
 
 function parseParams(v: unknown): Record<string, string> | null {
   if (!isPlainObject(v)) return null
+  if (Object.keys(v).length > 32) return null
   const params: Record<string, string> = {}
   for (const [key, value] of Object.entries(v)) {
-    if (typeof value !== 'string') return null
+    if (typeof value !== 'string' || value.length > 2000 || key.length > 100) return null
     params[key] = value
   }
   return params

@@ -95,6 +95,7 @@ type Screen =
   | { kind: 'idle'; notice?: string }
   | { kind: 'qr'; secret: string }
   | { kind: 'scan'; error?: string }
+  | { kind: 'confirm-guardian'; text: string; guardianPk: string }
   | { kind: 'sending' }
   | { kind: 'sent' }
   | { kind: 'retry-send'; text: string; notice: string }
@@ -104,6 +105,7 @@ type Screen =
   | { kind: 'confirm-unlink'; pk: string }
 
 let screen: Screen = { kind: 'idle' }
+let pairingGeneration = 0
 
 /** A verified pairing request waiting for our own guardian-of signature
  *  (kept for "Try again" when My Signet doesn't answer). */
@@ -126,6 +128,7 @@ function show(next: Screen): void {
  *  `SignerRejected` from the identity signer (the screen offers "Try
  *  again"). */
 export async function dependantScanned(text: string): Promise<'sent' | 'invalid' | 'not-dependant'> {
+  const generation = pairingGeneration
   const self = currentSession()
   if (!self?.dependant) return 'not-dependant'
   const link = parseLinkUri(text)
@@ -139,6 +142,7 @@ export async function dependantScanned(text: string): Promise<'sent' | 'invalid'
     content: JSON.stringify({ s: link.s, d: v.event, statement: self.statement }),
   }
   const wrap = await giftWrap(phoneSigner(), link.p, rumor, personalInboxTag(link.p))
+  if (generation !== pairingGeneration || currentSession() !== self) return 'invalid'
   await publishSigned(circles.appRelays(store.load()), wrap as unknown as { id: string; sig: string; [k: string]: unknown })
   return 'sent'
 }
@@ -319,6 +323,7 @@ export function ensure(): void {
  *  would keep the camera open past sign-out. Called from signin.ts's
  *  `doSignOut()`, the app's one hardened sign-out routine. */
 export function resetForSignOut(): void {
+  pairingGeneration++
   screen = { kind: 'idle' }
   awaitingSign = null
   paired = null
@@ -349,7 +354,8 @@ function startScan(): void {
   void startQrScan((text) => {
     if (screen.kind !== 'scan') return true
     if (!parseLinkUri(text)) return false // keep looking
-    void runDependantScanned(text)
+    const link = parseLinkUri(text)!
+    show({ kind: 'confirm-guardian', text, guardianPk: link.g })
     return true
   }, {
     stillWanted: () => screen.kind === 'scan',
@@ -366,6 +372,8 @@ export function handleAction(action: string, node: HTMLElement): void {
     show({ kind: 'qr', secret: newLinkSecret(nowSec()) })
   } else if (action === 'link-scan') {
     if (self.dependant) startScan()
+  } else if (action === 'link-confirm-guardian') {
+    if (screen.kind === 'confirm-guardian') void runDependantScanned(screen.text)
   } else if (action === 'link-retry-send') {
     if (screen.kind === 'retry-send') void runDependantScanned(screen.text)
   } else if (action === 'link-retry-sign') {
@@ -384,6 +392,11 @@ export function handleAction(action: string, node: HTMLElement): void {
     show({ kind: 'idle', notice: 'Approve the unlink in My Signet.' })
     void unlink(pk).then((ok) => show({ kind: 'idle', notice: ok ? `Unlinked from ${nameOf(pk)}.` : "Couldn't unlink — try again." }))
   } else if (action === 'link-done' || action === 'link-cancel') {
+    pairingGeneration++
+    if (screen.kind === 'qr') {
+      const secret = screen.secret
+      store.update(p => { delete p.linkSecrets[secret] })
+    }
     paired = null
     awaitingSign = null
     show({ kind: 'idle' })
@@ -454,6 +467,16 @@ export function view(p: store.Persisted): string {
         <div class="qr-scan-mount"></div>
         <button type="button" data-action="link-cancel">Stop scanning</button>`
       break
+    case 'confirm-guardian': {
+      const guardianPk = screen.guardianPk
+      body = `<h3>Link with ${esc(nameOf(screen.guardianPk))}?</h3>
+        <p>This person will become your guardian. Check their identity together before continuing.</p>
+        ${snapshot().contacts.some(c => c.pks.includes(guardianPk)) ? '' : '<p role="alert">This person is not in your contacts.</p>'}
+        <p>${esc(screen.guardianPk)}</p>
+        <button type="button" data-action="link-confirm-guardian">Confirm guardian</button>
+        <button type="button" data-action="link-cancel">Cancel</button>`
+      break
+    }
     case 'sending':
       body = `<p class="muted">Approve linking in My Signet — ${esc(waitingCopy())}.</p>`
       break

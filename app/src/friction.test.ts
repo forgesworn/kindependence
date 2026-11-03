@@ -3,7 +3,7 @@ import {
   FRICTION_THRESHOLD,
   FRICTION_MIN_GAP_SEC,
   nextMapCheckState,
-  isQuietDay,
+  isQuietDay as quietWithPositions,
   shouldShowFrictionCard,
   dismissFrictionCard,
   recordMapCheck,
@@ -13,6 +13,14 @@ import * as store from './store.js'
 import type { Circle } from '@forgesworn/covey-kit'
 import type { AgreementRecord, Place, ActivityEvent, SafetyEvent } from './store.js'
 import type { PickupRecord } from './pickup.js'
+
+function isQuietDay(p: store.Persisted, now: number): boolean {
+  return quietWithPositions(p, now, () => new Map([['child-pk'.padEnd(64, '0'), { geohash: 'gcpvj0', precision: 6, at: now }]]))
+}
+
+it('does not call a day quiet when a dependant has no recent location', () => {
+  expect(quietWithPositions(basePersisted(), DAY1_NOON, () => new Map())).toBe(false)
+})
 
 // Minimal in-memory localStorage stand-in — same idiom as store.test.ts.
 function fakeLocalStorage(): Storage {

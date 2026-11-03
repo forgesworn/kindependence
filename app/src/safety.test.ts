@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
   SOS_HOLD_MS,
+  triggerSos,
+  activeAlertsView,
   helpLocationFrom,
   buildHelpWrap,
   decodeHelp,
@@ -19,6 +21,7 @@ import {
 import { decodeBeaconRumor, publishOrEnqueue } from './beacons.js'
 import * as store from './store.js'
 import type { Fix } from './geo.js'
+import * as geo from './geo.js'
 import { makeLocalSigner, deriveInbox, toHex } from '@forgesworn/covey-kit'
 import type { Circle } from '@forgesworn/covey-kit'
 import { giftUnwrap, rawNip44Decrypt } from '@forgesworn/roost-kit'
@@ -46,7 +49,7 @@ vi.mock('./beacons.js', async (importOriginal) => {
   return {
     ...actual,
     publishOrEnqueue: vi.fn(async () => {}),
-    selfFix: vi.fn(() => ({ lat: 51.5, lon: -0.12, accuracy: 10, at: 1_700_000_000 })),
+    selfFix: vi.fn(() => ({ lat: 51.5, lon: -0.12, accuracy: 10, at: Math.floor(Date.now() / 1000) })),
   }
 })
 
@@ -473,6 +476,7 @@ describe('findreq auto-answer freshness gate', () => {
 
   it('answers a fresh findreq addressed to this device with a location disclosure (positive control)', async () => {
     const self = childSelf()
+    store.update(p => { p.circles = [circle] })
     const rumor = await targetedFindreq(self.pkHex, Math.floor(Date.now() / 1000) - 10)
     await handleIncomingSignal(circle, rumor, FIND_PING_SIGNAL_TYPE, fakeSender(PK_A))
     await vi.waitFor(() => { expect(publishOrEnqueue).toHaveBeenCalledTimes(1) })
@@ -480,6 +484,7 @@ describe('findreq auto-answer freshness gate', () => {
 
   it('records but does NOT answer a stale findreq — no disclosure from a replayed wrap', async () => {
     const self = childSelf()
+    store.update(p => { p.circles = [circle] })
     const rumor = await targetedFindreq(self.pkHex, Math.floor(Date.now() / 1000) - (5 * 60 + 30))
     await handleIncomingSignal(circle, rumor, FIND_PING_SIGNAL_TYPE, fakeSender(PK_A))
     await flush()
@@ -487,5 +492,32 @@ describe('findreq auto-answer freshness gate', () => {
     // The log/state path is unaffected — only the disclosure gates (flock's
     // own split: state updates newest-wins, actions gate on freshness).
     expect(store.load().safetyEvents.some((e) => e.kind === 'pickup')).toBe(true)
+  })
+})
+
+
+describe('SOS delivery', () => {
+  beforeEach(() => {
+    vi.stubGlobal('localStorage', fakeLocalStorage())
+    vi.mocked(publishOrEnqueue).mockClear()
+  })
+  afterEach(() => { sessionForTests(null); vi.restoreAllMocks(); vi.unstubAllGlobals() })
+
+  it('publishes before waiting for a GPS request that never resolves', async () => {
+    sessionForTests({ identityPk: PK_A, phoneSkHex: toHex(generateSecretKey()) })
+    store.update(p => { p.circles = [fakeCircle()] })
+    vi.spyOn(geo, 'currentPosition').mockReturnValue(new Promise(() => {}))
+    void triggerSos()
+    await vi.waitFor(() => expect(publishOrEnqueue).toHaveBeenCalledTimes(1))
+  })
+
+  it('keeps an incoming SOS visible after routine alerts fill the recent list', () => {
+    sessionForTests({ identityPk: PK_A, phoneSkHex: toHex(generateSecretKey()) })
+    const now = Math.floor(Date.now() / 1000)
+    const p = store.load()
+    p.circles = [fakeCircle()]
+    p.safetyEvents = [{ id: 'help', kind: 'help', circleId: 'circle-1', from: PK_B, at: now - 3600 }, ...Array.from({length: 6}, (_, i) => ({ id: String(i), kind: 'checkin' as const, circleId: 'circle-1', from: PK_B, at: now }))]
+    expect(activeAlertsView(p)).toContain('needs help')
+    expect(activeAlertsView(p)).toContain('1h ago')
   })
 })

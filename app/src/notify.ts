@@ -58,16 +58,16 @@ export type NotifyKind =
   | 'journey'
   | 'message' | 'request'
   | 'agreement-status' | 'leave-reminder'
-  | 'battery-low'
+  | 'battery-low' | 'deadline-unconfirmed'
 
 /** The five native notification channels (task contract: "channel per
  *  kind-category: safety/places/messages/agreements/battery") — also just a
  *  plain grouping label on web, where there's no channel concept to speak
  *  of. */
-export type NotifyCategory = 'safety' | 'places' | 'messages' | 'agreements' | 'battery'
+export type NotifyCategory = 'sos' | 'safety' | 'places' | 'messages' | 'agreements' | 'battery'
 
 const CATEGORY_FOR_KIND: Record<NotifyKind, NotifyCategory> = {
-  sos: 'safety',
+  sos: 'sos',
   checkin: 'safety',
   'pickup-requested': 'safety',
   'pickup-status': 'safety',
@@ -93,6 +93,7 @@ const CATEGORY_FOR_KIND: Record<NotifyKind, NotifyCategory> = {
   // SAME agreement the channel is already named for.
   'leave-reminder': 'agreements',
   'battery-low': 'battery',
+  'deadline-unconfirmed': 'safety',
 }
 
 interface ChannelDef { id: string; name: string; description: string }
@@ -106,11 +107,12 @@ interface ChannelDef { id: string; name: string; description: string }
  *  queued — the least urgent of them (a chat message) still deserves a
  *  heads-up the way the other four already got via the web Notification API. */
 const CHANNELS: Record<NotifyCategory, ChannelDef> = {
-  safety: { id: 'safety', name: 'Safety alerts', description: 'SOS, check-ins, and pickup requests' },
-  places: { id: 'places', name: 'Safe areas', description: 'Arrivals, departures, and safe-area notices' },
-  messages: { id: 'messages', name: 'Messages', description: 'Direct messages and circle chat' },
-  agreements: { id: 'agreements', name: 'Agreements', description: 'Return-time agreement updates' },
-  battery: { id: 'battery', name: 'Battery', description: 'Low-battery updates from your circle' },
+  sos: { id: 'sos-v2', name: 'SOS', description: 'Urgent requests for help' },
+  safety: { id: 'safety-v2', name: 'Safety alerts', description: 'Check-ins and pickup requests' },
+  places: { id: 'places-v2', name: 'Safe areas', description: 'Arrivals, departures, and safe-area notices' },
+  messages: { id: 'messages-v2', name: 'Messages', description: 'Direct messages and circle chat' },
+  agreements: { id: 'agreements-v2', name: 'Agreements', description: 'Return-time agreement updates' },
+  battery: { id: 'battery-v2', name: 'Battery', description: 'Low-battery updates from your circle' },
 }
 
 // ---------------------------------------------------------------------------
@@ -144,7 +146,7 @@ export const CONSOLIDATE_WINDOW_SEC = 300
  * see `notify()`'s doc comment for why the two live at different layers.
  */
 export function shouldNotifyForEvent(inserted: boolean, at: number, nowSecValue: number, freshSec: number = NOTIFY_FRESH_SEC): boolean {
-  return inserted && nowSecValue - at <= freshSec
+  return inserted && Number.isFinite(at) && at <= nowSecValue + 600 && nowSecValue - at <= freshSec
 }
 
 /**
@@ -180,6 +182,7 @@ export function shouldFireNotification(lastAt: number | undefined, nowSecValue: 
  *  `window-reminder`). */
 export const QUIET_EXEMPT_KINDS: ReadonlySet<NotifyKind> = new Set<NotifyKind>([
   'sos',
+  'deadline-unconfirmed',
   'emergency-access',
   'safe-area-escalation',
   'pickup-requested',
@@ -227,6 +230,7 @@ function consolidateKey(kind: NotifyKind, actorPk: string | null): string {
 
 const lastFiredAt = new Map<string, number>()
 
+let notificationGeneration = 0
 let nextNativeId = 1
 /** Capacitor's LocalNotifications requires a 32-bit integer id per
  *  notification; nothing here ever needs to cancel one by id afterwards
@@ -241,7 +245,8 @@ function nextId(): number {
 let nativePermissionRequested = false
 const createdChannels = new Set<NotifyCategory>()
 
-async function nativeNotify(category: NotifyCategory, title: string, body: string): Promise<void> {
+async function nativeNotify(category: NotifyCategory, title: string, body: string): Promise<boolean> {
+  const generation = notificationGeneration
   try {
     const { LocalNotifications } = await import('@capacitor/local-notifications')
     if (!nativePermissionRequested) {
@@ -252,10 +257,10 @@ async function nativeNotify(category: NotifyCategory, title: string, body: strin
       } catch { /* best-effort — schedule() below still no-ops safely if denied */ }
     }
     if (!createdChannels.has(category)) {
-      createdChannels.add(category)
       const ch = CHANNELS[category]
       try {
-        await LocalNotifications.createChannel({ id: ch.id, name: ch.name, description: ch.description, importance: 4, visibility: 1 })
+        await LocalNotifications.createChannel({ id: ch.id, name: ch.name, description: ch.description, importance: 4, visibility: category === 'sos' ? 1 : 0, vibration: true })
+        createdChannels.add(category)
       } catch { /* channel already exists, or an older OS with no channel concept */ }
     }
     // smallIcon repeated per-call (capacitor.config.ts's `plugins.LocalNotifications.smallIcon`
@@ -263,23 +268,29 @@ async function nativeNotify(category: NotifyCategory, title: string, body: strin
     // launcher-icon fallback Android substitutes when none is resolved,
     // matching signet-app's own two-call-site convention (final review
     // follow-up, item 6/M-triage: "no custom notification small-icon").
+    const permission = await LocalNotifications.checkPermissions()
+    if (permission.display !== 'granted') { await refreshAlertPermission(); return false }
+    if (generation !== notificationGeneration) return false
     await LocalNotifications.schedule({ notifications: [{ id: nextId(), channelId: CHANNELS[category].id, title, body, smallIcon: 'ic_stat_kindependence' }] })
+    return true
   } catch {
     // plugin unavailable (e.g. a dev build without `cap sync`) — the in-app
-    // banner/log every call site already maintains is the fallback, same
-    // "best-effort, never throws" discipline as beacons.ts's own outbox.
+    // banner/log every call site already maintains is the fallback.
+    return false
   }
 }
 
 /** Web transport — unchanged from the pre-Task-9 `notifyIfGranted` every
  *  call site used to define for itself: fires only if permission is ALREADY
  *  granted, never requests it (see the module doc comment). */
-function webNotify(title: string, body: string): void {
-  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return
+function webNotify(title: string, body: string): boolean {
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return false
   try {
     new Notification(title, { body })
+    return true
   } catch {
     // unsupported/blocked — the in-app banner/log already has this event
+    return false
   }
 }
 
@@ -296,7 +307,7 @@ function webNotify(title: string, body: string): void {
 export async function notify(kind: NotifyKind, actorPk: string | null, title: string, body: string): Promise<void> {
   const key = consolidateKey(kind, actorPk)
   const now = nowSec()
-  if (!shouldFireNotification(lastFiredAt.get(key), now)) return
+  if (kind !== 'sos' && (!shouldFireNotification(lastFiredAt.get(key), now) || inFlightNotifications.has(key))) return
   // Quiet hours (Phase 5 Task 1, brief §32.5) — AFTER the consolidation
   // check above (a collapsed repeat isn't "held", it was never novel to
   // begin with) but BEFORE the lastFiredAt stamp below: a HELD ordinary
@@ -309,10 +320,55 @@ export async function notify(kind: NotifyKind, actorPk: string | null, title: st
     const localMinutes = nowDate.getHours() * 60 + nowDate.getMinutes()
     if (isQuietNow(store.load().settings.quietHours, localMinutes)) return
   }
-  lastFiredAt.set(key, now)
+  inFlightNotifications.add(key)
+  try {
+    const delivered = isNativePlatform() ? await nativeNotify(CATEGORY_FOR_KIND[kind], title, body) : webNotify(title, body)
+    if (delivered) lastFiredAt.set(key, now)
+  } finally { inFlightNotifications.delete(key) }
+}
+
+
+const inFlightNotifications = new Set<string>()
+let alertWarning = ''
+
+export function alertPermissionView(): string {
+  const webNeedsPermission = !isNativePlatform() && typeof Notification !== 'undefined' && Notification.permission !== 'granted'
+  if (!alertWarning && !webNeedsPermission) return ''
+  return `<aside role="alert"><p>${alertWarning || 'Alert notifications are not enabled on this phone.'}</p><button type="button" data-action="safety-enable-notifications">Enable alert notifications</button></aside>`
+}
+
+export async function refreshAlertPermission(): Promise<void> {
+  if (!isNativePlatform()) return
+  let warning: string
+  try {
+    const { LocalNotifications } = await import('@capacitor/local-notifications')
+    const perm = await LocalNotifications.checkPermissions()
+    const { channels } = await LocalNotifications.listChannels()
+    warning = perm.display !== 'granted' ? 'Notifications are blocked. Enable them in Android settings to hear safety alerts.'
+      : channels.some(c => c.id === CHANNELS.sos.id && c.importance === 0) ? 'SOS notifications are muted. Enable the SOS channel in Android settings.' : ''
+  } catch { warning = 'This phone could not check whether alert notifications are enabled.' }
+  if (warning !== alertWarning) { alertWarning = warning; store.notify() }
+}
+
+export async function requestAlertPermission(): Promise<void> {
   if (isNativePlatform()) {
-    await nativeNotify(CATEGORY_FOR_KIND[kind], title, body)
-  } else {
-    webNotify(title, body)
+    const { LocalNotifications } = await import('@capacitor/local-notifications')
+    await LocalNotifications.requestPermissions().catch(() => {})
+    await refreshAlertPermission()
+  } else if (typeof Notification !== 'undefined') {
+    await Notification.requestPermission().catch(() => {})
   }
+  store.notify()
+}
+
+
+export async function clearForSignOut(): Promise<void> {
+  notificationGeneration++
+  lastFiredAt.clear()
+  inFlightNotifications.clear()
+  if (!isNativePlatform()) return
+  const { LocalNotifications } = await import('@capacitor/local-notifications')
+  const pending = await LocalNotifications.getPending()
+  if (pending.notifications.length) await LocalNotifications.cancel({ notifications: pending.notifications })
+  await LocalNotifications.removeAllDeliveredNotifications()
 }

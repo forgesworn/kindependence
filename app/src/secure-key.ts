@@ -151,5 +151,6 @@ export function loadOrCreatePhoneKey(store: SecretStore = secretStore()): Promis
  *  one. Used when a dependant (or this device) is removed from the family
  *  and its old device statement should no longer be usable. */
 export async function forgetPhoneKey(store: SecretStore = secretStore()): Promise<void> {
+  await inFlight?.catch(() => {})
   await store.remove(PHONE_KEY_NAME)
 }

@@ -1210,7 +1210,7 @@ describe('leaveBanners: cleared on en-route/arrived (child responded), KEPT thro
     await evaluateLeaveReminder(store.load(), fam.pkHex, record, byUnix)
     expect(leaveBannerFor(record.agreement.id, byUnix)).toBe(leaveBehindCopy('School gate'))
 
-    const sig = buildAgreementStatus({ id: record.agreement.id, status: 'en-route', by: PK_GUARDIAN }, byUnix)
+    const sig = buildAgreementStatus({ id: record.agreement.id, status: 'en-route', by: PK_CHILD }, byUnix)
     const rumor: Rumor = {
       pubkey: PK_GUARDIAN, // NOT this device's own pkHex (PK_CHILD) — a real signal, not a self-echo
       created_at: byUnix,
@@ -1219,7 +1219,7 @@ describe('leaveBanners: cleared on en-route/arrived (child responded), KEPT thro
       content: JSON.stringify(sig),
     }
 
-    handleIncomingSignal(circle, rumor, 'agreement-status', fakeSender(PK_GUARDIAN))
+    handleIncomingSignal(circle, rumor, 'agreement-status', fakeSender(PK_GUARDIAN, PK_CHILD))
 
     expect(leaveBannerFor(record.agreement.id, byUnix)).toBeUndefined()
   })
@@ -1238,7 +1238,7 @@ describe('leaveBanners: cleared on en-route/arrived (child responded), KEPT thro
     await evaluateLeaveReminder(store.load(), fam.pkHex, record, byUnix)
     expect(leaveBannerFor(record.agreement.id, byUnix)).toBe(leaveBehindCopy('School gate'))
 
-    const sig = buildAgreementStatus({ id: record.agreement.id, status: 'arrived', by: PK_GUARDIAN }, byUnix)
+    const sig = buildAgreementStatus({ id: record.agreement.id, status: 'arrived', by: PK_CHILD }, byUnix)
     const rumor: Rumor = {
       pubkey: PK_GUARDIAN, // NOT this device's own pkHex (PK_CHILD) — a real signal, not a self-echo
       created_at: byUnix,
@@ -1247,7 +1247,7 @@ describe('leaveBanners: cleared on en-route/arrived (child responded), KEPT thro
       content: JSON.stringify(sig),
     }
 
-    handleIncomingSignal(circle, rumor, 'agreement-status', fakeSender(PK_GUARDIAN))
+    handleIncomingSignal(circle, rumor, 'agreement-status', fakeSender(PK_GUARDIAN, PK_CHILD))
 
     expect(leaveBannerFor(record.agreement.id, byUnix)).toBeUndefined()
   })
@@ -1309,7 +1309,7 @@ describe('leaveBanners: cleared on en-route/arrived (child responded), KEPT thro
     await evaluateLeaveReminder(store.load(), fam.pkHex, record, byUnix)
     expect(leaveBannerFor(record.agreement.id, byUnix)).toBe(leaveBehindCopy('School gate'))
 
-    const sig = buildAgreementStatus({ id: record.agreement.id, status: 'late', by: PK_GUARDIAN }, byUnix)
+    const sig = buildAgreementStatus({ id: record.agreement.id, status: 'late', by: PK_CHILD }, byUnix)
     const rumor: Rumor = {
       pubkey: PK_GUARDIAN, // NOT this device's own pkHex (PK_CHILD) — a real signal, not a self-echo
       created_at: byUnix,
@@ -1318,7 +1318,7 @@ describe('leaveBanners: cleared on en-route/arrived (child responded), KEPT thro
       content: JSON.stringify(sig),
     }
 
-    handleIncomingSignal(circle, rumor, 'agreement-status', fakeSender(PK_GUARDIAN))
+    handleIncomingSignal(circle, rumor, 'agreement-status', fakeSender(PK_GUARDIAN, PK_CHILD))
 
     expect(leaveBannerFor(record.agreement.id, byUnix)).toBe(leaveBehindCopy('School gate'))
   })
@@ -1470,5 +1470,16 @@ describe('pruneOrphanedAgreementTravelMode — final-review fix 6 (same forward 
     store.update((p) => { p.agreements = []; p.agreementTravelMode = {} })
     pruneOrphanedAgreementTravelMode(store.load())
     expect(store.load().agreementTravelMode).toEqual({})
+  })
+})
+
+
+describe('agreement participant authority', () => {
+  it('ignores acknowledgements, status and extension requests from another member', () => {
+    const records = [fakeRecord()]
+    const id = records[0]!.agreement.id
+    expect(applyAgreementAck(records, buildAgreementAck({ id, by: PK_GUARDIAN }, 1000))).toEqual(records)
+    expect(applyAgreementStatus(records, buildAgreementStatus({ id, by: PK_GUARDIAN, status: 'arrived' }, 1000))).toEqual(records)
+    expect(applyExtendReq(records, buildExtendReq({ id, by: PK_GUARDIAN, extraMin: 15 }, 1000))).toEqual(records)
   })
 })

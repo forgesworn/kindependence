@@ -143,7 +143,7 @@ describe('restore', () => {
     expect(session.currentSession()).toEqual(full)
   })
 
-  it('treats an unreadable phone key as signed out: clears the session and returns null', async () => {
+  it('preserves the session when the keystore is temporarily unavailable', async () => {
     const transport = fakeBunker({})
     const info = fakeSessionInfo({ identityPk: transport.pubkey })
     await session.startSession(info, transport)
@@ -167,10 +167,8 @@ describe('restore', () => {
       get length() { return mem.size },
     } as unknown as Storage)
 
-    const restored = await session.restore()
-    expect(restored).toBeNull()
-    expect(session.currentSession()).toBeNull()
-    expect(store.load().session).toBeUndefined()
+    await expect(session.restore()).rejects.toThrow('phone key unreadable')
+    expect(store.load().session).toBeDefined()
   })
 
   it('does not reconnect the identity transport eagerly — only a real signing call does', async () => {
@@ -342,7 +340,7 @@ describe('signOut', () => {
 })
 
 describe('final fix A6: restore() discards a dead session completely', () => {
-  it('unreadable phone key → restore forgets it → a new sign-in succeeds with a new key', async () => {
+  it('a transient read failure preserves the phone key for a later retry', async () => {
     const first = fakeBunker({})
     const old = await session.startSession(fakeSessionInfo({ identityPk: first.pubkey }), first)
     const oldSk = await secretStore().get('phone-key')
@@ -355,11 +353,10 @@ describe('final fix A6: restore() discards a dead session completely', () => {
       return v
     })
 
-    expect(await session.restore()).toBeNull()
-    const second = fakeBunker({})
-    const fresh = await session.startSession(fakeSessionInfo({ identityPk: second.pubkey }), second)
-    expect(fresh.phonePk).toMatch(/^[0-9a-f]{64}$/)
-    expect(fresh.phonePk).not.toBe(old.phonePk)
+    await expect(session.restore()).rejects.toThrow('phone key unreadable')
+    vi.restoreAllMocks()
+    expect((await session.restore())?.phonePk).toBe(old.phonePk)
+    expect(await secretStore().get('phone-key')).toBe(oldSk)
   })
 
   it('a discarded session wipes the store and the bunker secrets: a different identity signing in sees no circles', async () => {
@@ -410,4 +407,25 @@ describe('identitySigner', () => {
     const signed = await session.identitySigner().signEvent({ kind: 1, content: 'hi', tags: [], created_at: 1_700_000_000 })
     expect(signed.pubkey).toBe(bunker.pubkey)
   })
+})
+
+it('cannot overwrite a newer session when an older sign-in resumes after sign-out', async () => {
+  const first = fakeBunker({})
+  await session.startSession(fakeSessionInfo({ identityPk: first.pubkey }), first)
+  let release!: () => void
+  const closing = new Promise<void>(resolve => { release = resolve })
+  const close = vi.spyOn(first, 'close').mockReturnValue(closing)
+  const older = fakeBunker({})
+  const oldUri = `bunker://${older.pubkey}?relay=wss://old.example&secret=old`
+  const pending = session.startSession(fakeSessionInfo({ identityPk: older.pubkey, transport: {kind:'nip46', bunkerUri:oldUri} }), older)
+  const rejected = expect(pending).rejects.toThrow('sign-in cancelled')
+  await vi.waitFor(() => expect(close).toHaveBeenCalled())
+  await session.signOut()
+  const latest = fakeBunker({})
+  const newUri = `bunker://${latest.pubkey}?relay=wss://new.example&secret=new`
+  await session.startSession(fakeSessionInfo({ identityPk: latest.pubkey, transport: {kind:'nip46', bunkerUri:newUri} }), latest)
+  release()
+  await rejected
+  expect(session.currentSession()?.identityPk).toBe(latest.pubkey)
+  expect(await secretStore().get('bunker-uri')).toBe(newUri)
 })

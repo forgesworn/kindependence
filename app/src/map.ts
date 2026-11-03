@@ -304,7 +304,7 @@ export class MapView {
       style: STYLE,
       center: centre ? [centre.lon, centre.lat] : [-0.1278, 51.5074],
       zoom: 13,
-      attributionControl: { compact: true },
+      attributionControl: { compact: false },
     })
     this.map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
     // Task 2 (brief §6.5): flip `userMoved` on the first REAL user drag/zoom

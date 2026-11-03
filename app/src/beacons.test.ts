@@ -701,6 +701,8 @@ describe('buildBeaconWrap / decodeBeaconRumor — wire round trip', () => {
 describe('publishOrEnqueue — successful publish notes pool liveness (final-review fix, Important #1(b))', () => {
   beforeEach(() => {
     vi.stubGlobal('localStorage', fakeLocalStorage())
+    sessionForTests({ identityPk: 'a'.repeat(64), phoneSkHex: '2'.repeat(64) })
+    store.update(p => { p.circles = [fakeCircle()] })
   })
   afterEach(() => {
     vi.unstubAllGlobals()
@@ -735,7 +737,7 @@ describe('publishOrEnqueue — successful publish notes pool liveness (final-rev
     vi.mocked(publishSigned).mockRejectedValueOnce(new Error('all relays down'))
     const spy = vi.spyOn(poolHealth, 'notePoolActivity')
 
-    await expect(publishOrEnqueue(['wss://relay.example'], await fakeWrap())).resolves.toBeUndefined() // never rejects — falls to the outbox
+    await expect(publishOrEnqueue(['wss://relay.example'], await fakeWrap())).resolves.toBe('queued') // never rejects — falls to the outbox
     expect(spy).not.toHaveBeenCalled()
   })
 })
@@ -756,6 +758,10 @@ describe('flushOutbox — serialised', () => {
     vi.stubGlobal('localStorage', fakeLocalStorage())
     const roost = await import('@forgesworn/roost-kit')
     const b = await import('./beacons.js')
+    const state = await import('./store.js')
+    state.update(p => { p.circles = [fakeCircle()] })
+    const { sessionForTests } = await import('./session.js')
+    sessionForTests({ identityPk: 'a'.repeat(64), phoneSkHex: '2'.repeat(64) })
     const signer = makeLocalSigner(toHex(generateSecretKey()))
     const fix: Fix = { lat: 51.5074, lon: -0.1278, accuracy: 15, at: 1_700_000_000 }
     const wrap = (): Promise<Awaited<ReturnType<typeof buildBeaconWrap>>> => b.buildBeaconWrap(signer, fakeCircle(), fix, 6)
@@ -924,5 +930,13 @@ describe('onCircleInboxWrap — content-bound rumor-id dedup', () => {
     await onCircleInboxWrap(circle.id, inbox.sk, wrap)
     await onCircleInboxWrap(circle.id, inbox.sk, wrap) // relay re-delivery after a pool reset — same rumor id
     expect(seen).toHaveLength(1)
+  })
+})
+
+
+describe('position freshness', () => {
+  it('rejects a position more than ten minutes into the future', () => {
+    upsertPosition('clock-skew', 'member', { geohash: 'gcpvj0', precision: 6, at: Math.floor(Date.now() / 1000) + 601 })
+    expect(memberPositions('clock-skew').size).toBe(0)
   })
 })

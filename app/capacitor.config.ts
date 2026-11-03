@@ -7,6 +7,8 @@ import type { CapacitorConfig } from '@capacitor/cli'
 const config: CapacitorConfig = {
   appId: 'dev.forgesworn.kindependence',
   appName: 'Kindependence',
+  loggingBehavior: 'none',
+  appendUserAgent: 'Kindependence/0.1 (https://kindependence.app)',
   webDir: 'dist',
   // Matches the app's own dark theme (styles.css / manifest.webmanifest
   // background_color — the Kindred "room" tone) so there's no colour flash

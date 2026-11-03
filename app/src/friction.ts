@@ -30,6 +30,7 @@
 // (`dismissFrictionCard`) records today's date so it stays gone until
 // tomorrow rolls the day stamp over.
 
+import { memberPositions } from './beacons.js'
 import * as store from './store.js'
 import { localDay } from './places.js'
 
@@ -135,7 +136,8 @@ function isToday(at: number, nowSec: number): boolean {
  *  any of the above is true — a false positive here is the one way this
  *  feature could discourage checking the map during an actual situation,
  *  which the design spec explicitly forbids. */
-export function isQuietDay(p: store.Persisted, nowSec: number): boolean {
+export function isQuietDay(p: store.Persisted, nowSec: number, positionsFor: typeof memberPositions = memberPositions): boolean {
+  if (p.circles.some(c => c.members.some(m => m.role === 'child' && nowSec - (positionsFor(c.id).get(m.pk)?.at ?? 0) > 900))) return false
   if (p.safetyEvents.some((e) => e.kind === 'help' && isToday(e.at, nowSec))) return false
   if (p.activity.some((e) => DAY_SCOPED_ACTIVITY_KINDS.has(e.kind) && isToday(e.at, nowSec))) return false
   if (p.pickups.some((r) => r.phase !== 'collected' && r.phase !== 'declined')) return false

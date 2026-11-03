@@ -71,15 +71,15 @@ SHA-256: TO BE RECORDED AT KEY CREATION
 ```bash
 # from repo root
 npm run build && (cd app && npx cap sync android)
-cd app/android && ./gradlew assembleRelease
-# → app/build/outputs/apk/release/app-release.apk  (signed, once the key exists)
+(cd app/android && ./gradlew assembleRelease)
+# → app/android/app/build/outputs/apk/release/app-release.apk  (signed, once the key exists)
 ```
 
 Verify the signature:
 
 ```bash
 "$ANDROID_HOME"/build-tools/<version>/apksigner verify --print-certs \
-  app/build/outputs/apk/release/app-release.apk
+  app/android/app/build/outputs/apk/release/app-release.apk
 ```
 
 Bump `versionCode` and `versionName` in `app/android/app/build.gradle` before

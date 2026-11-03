@@ -55,6 +55,9 @@ export interface SafetyEvent {
    *  check-in; the pickup-req's target child for a pickup entry). */
   from: string
   kind: 'help' | 'checkin' | 'pickup'
+  acknowledgedAt?: number
+  delivery?: 'sending' | 'sent' | 'queued' | 'failed'
+  wrapId?: string
   at: number
   /** Present only when the event carried a location (check-in's optional
    *  share, or a pickup answer) — absent for a location-less help alert or
@@ -372,6 +375,9 @@ export interface Persisted {
    *  local-only, same convention as every other field here. */
   settings: {
     relayUrl?: string
+    placeEpisodeIds?: Record<string, string>
+    guardianWindowConfirmations?: Record<string, number>
+    removalNotices?: Array<{ circleId: string; name: string; at: number }>
     mapCircles?: string[]
     circleBasePrecision?: Record<string, number>
     shareBattery?: Record<string, boolean>
@@ -567,23 +573,9 @@ export interface Persisted {
    *  brief §32.2) — keyed by circle id, absent means no active journey.
    *  Owned by journey.ts. */
   journeys: Record<string, Journey>
-  /** Phase 5 Task 5 (brief §13.4): a circle's currently-approved boundary-
-   *  exits — every entry means "being outside `placeId` doesn't count as an
-   *  exit, until `until` (unix seconds)". Deliberately keyed by
-   *  circleId+placeId ONLY, not by which member the leave was granted to
-   *  (this is the task's own specified interface, verbatim) — in a
-   *  MULTI-CHILD circle this means an approved leave for a place technically
-   *  suppresses ANY child's exit from that place for the same window, not
-   *  just the requester's. Accepted v1 scope: most families' "ask to go
-   *  out" flow is one child at a time in practice, and `applyLeaveResolution`
-   *  (places.ts) already REPLACES rather than accumulates an entry for the
-   *  same placeId, so this never grows unbounded. Pruned of expired entries
-   *  on every `places.tick()` (`places.pruneExpiredLeaves`) — this is the
-   *  "prune-on-expiry" the task brief asks for; `places.isLeaveApproved`
-   *  additionally treats a stale/expired entry as absent regardless, so a
-   *  missed prune is never a correctness bug, only unbounded (if slow)
-   *  growth. Owned by places.ts. */
-  approvedLeaves: Record<string, Array<{ placeId: string; until: number }>>
+  /** Approved boundary exits, scoped to the dependant granted leave.
+   * Legacy entries without a member do not suppress a dependant's alerts. */
+  approvedLeaves: Record<string, Array<{ placeId: string; until: number; memberPk?: string }>>
   /** Phase 5 Task 5 (brief §13.4/§22.3-22.4): a guardian's per-circle
    *  Allow/Prompt/Deny verdict for boundary-exit ("leave-area") requests —
    *  same three-value `PolicyVerdict` BROOD's real `family-policy`
@@ -1065,23 +1057,37 @@ export function clear(): void {
  *  carrying its own `skHex`, a raw secret key kept in the clear): see this
  *  file's own module doc comment for why that's a hard clear, not a
  *  partial coercion. */
+let unsaved: { storage: Storage; json: string } | null = null
+let storageFailure = false
+let unreadable: { storage: Storage; raw: string } | null = null
+let recoveryWarning = false
+export function hasRecoveryCopy(): boolean { return recoveryWarning }
+function preserveUnreadable(raw: string): Persisted {
+  unreadable = { storage: localStorage, raw }
+  recoveryWarning = true
+  return defaults()
+}
+
+export function storageFailed(): boolean { return storageFailure }
+
 export function load(): Persisted {
   let raw: string | null
   try {
-    raw = localStorage.getItem(KEY)
+    raw = unsaved?.storage === localStorage ? unsaved.json : localStorage.getItem(KEY)
   } catch {
     return defaults()
   }
   if (!raw) return defaults()
   try {
     const parsed: unknown = JSON.parse(raw)
-    if (!parsed || typeof parsed !== 'object' || (parsed as { v?: unknown }).v !== 1) return defaults()
+    if (!parsed || typeof parsed !== 'object' || (parsed as { v?: unknown }).v !== 1) return preserveUnreadable(raw)
     const rawIdentity = (parsed as { identity?: unknown }).identity
     if (rawIdentity && typeof rawIdentity === 'object' && typeof (rawIdentity as { skHex?: unknown }).skHex === 'string') {
       try { localStorage.removeItem(KEY) } catch { /* ignore */ }
       return defaults()
     }
     const p = parsed as Partial<Persisted>
+    if (Array.isArray(p.circles) && p.circles.some(c => !c || typeof c !== 'object' || typeof c.id !== 'string' || typeof c.seedHex !== 'string' || !Array.isArray(c.members) || c.members.some(m => !m || typeof m.pk !== 'string' || !['guardian', 'child', 'peer'].includes(m.role)))) return preserveUnreadable(raw)
     return {
       v: 1,
       circles: Array.isArray(p.circles) ? (p.circles as Circle[]) : [],
@@ -1107,7 +1113,7 @@ export function load(): Persisted {
       agreementTravelMode: p.agreementTravelMode && typeof p.agreementTravelMode === 'object' ? (p.agreementTravelMode as Record<string, TravelMode>) : {},
       leaveFired: p.leaveFired && typeof p.leaveFired === 'object' ? (p.leaveFired as Record<string, true>) : {},
       journeys: p.journeys && typeof p.journeys === 'object' ? (p.journeys as Record<string, Journey>) : {},
-      approvedLeaves: p.approvedLeaves && typeof p.approvedLeaves === 'object' ? (p.approvedLeaves as Record<string, Array<{ placeId: string; until: number }>>) : {},
+      approvedLeaves: p.approvedLeaves && typeof p.approvedLeaves === 'object' ? (p.approvedLeaves as Record<string, Array<{ placeId: string; until: number; memberPk?: string }>>) : {},
       leaveAreaPolicy: p.leaveAreaPolicy && typeof p.leaveAreaPolicy === 'object' ? (p.leaveAreaPolicy as Record<string, PolicyVerdict>) : {},
       mapChecks: p.mapChecks && typeof p.mapChecks === 'object' ? (p.mapChecks as Persisted['mapChecks']) : { day: '', count: 0, lastAt: 0 },
       frictionDismissedDay: typeof p.frictionDismissedDay === 'string' ? p.frictionDismissedDay : undefined,
@@ -1210,17 +1216,25 @@ export function load(): Persisted {
         : [],
     }
   } catch {
-    return defaults()
+    return preserveUnreadable(raw)
   }
 }
 
-/** Writes the blob as-is. Swallows quota / private-mode storage errors — a
- *  failed persist should never crash the app; the in-memory state still won. */
+/** Keep failed writes available to subsequent reducers. Retry persistence on
+ * every write; never silently substitute the older on-disk snapshot. */
 export function save(p: Persisted): void {
+  const json = JSON.stringify(p)
   try {
-    localStorage.setItem(KEY, JSON.stringify(p))
+    if (unreadable?.storage === localStorage) {
+      localStorage.setItem(`kindependence.recovery.${Date.now()}`, unreadable.raw)
+      unreadable = null
+    }
+    localStorage.setItem(KEY, json)
+    unsaved = null
+    storageFailure = false
   } catch {
-    // ignore
+    unsaved = { storage: localStorage, json }
+    storageFailure = true
   }
 }
 

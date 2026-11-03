@@ -84,6 +84,14 @@ function stripBunkerSecret(uri: string): string {
 let session: SessionInfo | null = null
 let phoneSkHex: string | null = null
 let identityTransport: SignerTransport | null = null
+let endingSession: Promise<void> | null = null
+let sessionGeneration = 0
+let secretChanges: Promise<void> = Promise.resolve()
+function changeSecrets<T>(fn: () => Promise<T>): Promise<T> {
+  const result = secretChanges.then(fn, fn)
+  secretChanges = result.then(() => {}, () => {})
+  return result
+}
 
 /** Closes whatever identity transport is currently live, if any — a no-op
  *  `SignerTransport` that never actually connected (a `lazyTransport` no
@@ -104,13 +112,19 @@ async function closeLiveTransport(): Promise<void> {
  *  present the identical client pubkey `restore()`'s own reconnect will use
  *  later, rather than each minting its own separate key. */
 export async function bunkerClientSk(): Promise<Uint8Array> {
-  const secrets = secretStore()
-  let clientSkHex = await secrets.get(BUNKER_CLIENT_SK_NAME)
-  if (!clientSkHex) {
-    clientSkHex = bytesToHex(generateSecretKey())
-    await secrets.set(BUNKER_CLIENT_SK_NAME, clientSkHex)
-  }
-  return hexToBytes(clientSkHex)
+  await endingSession?.catch(() => {})
+  const generation = sessionGeneration
+  return changeSecrets(async () => {
+    if (generation !== sessionGeneration) throw new Error('sign-in cancelled')
+    const secrets = secretStore()
+    let clientSkHex = await secrets.get(BUNKER_CLIENT_SK_NAME)
+    if (!clientSkHex) {
+      clientSkHex = bytesToHex(generateSecretKey())
+      await secrets.set(BUNKER_CLIENT_SK_NAME, clientSkHex)
+    }
+    if (generation !== sessionGeneration) throw new Error('sign-in cancelled')
+    return hexToBytes(clientSkHex)
+  })
 }
 
 /** Builds the live transport for a session's own `transport` descriptor:
@@ -202,6 +216,16 @@ function lazyTransport(info: SessionInfo): SignerTransport {
 
 /** The current session, or `null` if signed out. */
 export function currentSession(): SessionInfo | null {
+  if (session && !session.dependant) {
+    const p = store.load()
+    const identity = session.identityPk
+    const dependant = p.circles.some(c => Array.isArray(c?.members) && c.members.some(m => m?.pk === identity && m.role === 'child'))
+      || Object.entries(p.guardianLinks).some(([key, pair]) => key.endsWith(`:${identity}`) && pair.d.pubkey === identity)
+    if (dependant) {
+      session.dependant = true
+      if (p.session?.identityPk === identity) { p.session.dependant = true; store.save(p) }
+    }
+  }
   return session
 }
 
@@ -251,17 +275,29 @@ export async function startSession(
   info: Omit<SessionInfo, 'phonePk' | 'statement'>,
   transport: SignerTransport,
 ): Promise<SessionInfo> {
+  await endingSession?.catch(() => {})
+  const generation = sessionGeneration
+
   if (transport.pubkey !== info.identityPk) {
     throw new Error('transport pubkey does not match the identity pubkey')
   }
   const phone = await loadOrCreatePhoneKey()
+  if (generation !== sessionGeneration) throw new Error('sign-in cancelled')
   await closeLiveTransport()
   // Fix round 1, finding 2: the full bunker uri (secret included) goes ONLY
   // to SecretStore; what's kept on `info`/persisted below has it stripped.
   let stored = info
   if (info.transport.kind === 'nip46') {
-    await secretStore().set(BUNKER_URI_NAME, info.transport.bunkerUri)
+    await changeSecrets(async () => {
+      if (generation !== sessionGeneration) throw new Error('sign-in cancelled')
+      await secretStore().set(BUNKER_URI_NAME, info.transport.kind === 'nip46' ? info.transport.bunkerUri : '')
+      if (generation !== sessionGeneration) throw new Error('sign-in cancelled')
+    })
     stored = { ...info, transport: { kind: 'nip46', bunkerUri: stripBunkerSecret(info.transport.bunkerUri) } }
+  }
+  if (generation !== sessionGeneration) {
+    void transport.close().catch(() => {})
+    throw new Error('sign-in cancelled')
   }
   const full: SessionInfo = { ...stored, phonePk: phone.pkHex }
   session = full
@@ -303,64 +339,26 @@ export function recordStatement(statement: SignedEvent): void {
  *  from reporting signed out. Shared tail of `restore()`'s two "this
  *  session can no longer be trusted" branches. */
 async function discardSession(): Promise<void> {
-  await closeLiveTransport()
-  session = null
-  phoneSkHex = null
-  identityTransport = null
-  store.clear()
-  await secretStore().remove(BUNKER_CLIENT_SK_NAME).catch(() => {})
-  await secretStore().remove(BUNKER_URI_NAME).catch(() => {})
+  await endSession(false).catch(() => {})
 }
 
-/** Restores a session from the store on app start. Returns `null` if the
- *  persisted store holds no session.
- *
- *  Two ways this device's phone key can no longer back the persisted
- *  session — both ruled as signed out (review fix round 1 adds the
- *  second): the session is discarded and this returns `null` — the whole
- *  local store and the bunker secrets are wiped (final fix A6, see
- *  `discardSession`).
- *   - Unreadable (secure-key.ts's `loadOrCreatePhoneKey` throwing
- *     `Error('phone key unreadable')`): this device can't read its phone
- *     key. Final fix A6 (ruling 32): the undecryptable value is forgotten,
- *     so signing in again creates a new key.
- *   - Readable, but its `pkHex` doesn't match the persisted
- *     `session.phonePk`: the keystore entry behind the old session was
- *     lost (cleared, reinstalled, …) while the store blob survived, so
- *     `loadOrCreatePhoneKey` silently minted a FRESH key that has never
- *     been authorised by anything. Signing into the old session with it
- *     would send phone-key traffic under a device statement that was
- *     issued for a different key entirely — so this is signed out too,
- *     but the fresh key is real and kept (not forgotten) for whatever
- *     session starts next.
- *
- *  The identity transport itself is NOT reconnected here — see
- *  `lazyTransport`; only the first actual sign/encrypt call pays that
- *  cost. Closes any transport left live from an EARLIER `restore()` (or
- *  `startSession()`) call first (review fix round 1) — restoring twice
- *  must not leak a connection the first restore already made. */
+/** Restore without reconnecting the identity signer. A failed secret read
+ * throws for the retry screen and preserves all saved state. A readable
+ * replacement key that does not match the saved phone key discards only
+ * the old session; the new key remains available for a fresh sign-in. */
 export async function restore(): Promise<SessionInfo | null> {
+  const generation = sessionGeneration
   const p = store.load()
   if (!p.session) return null
-  let phone: { skHex: string; pkHex: string }
-  try {
-    phone = await loadOrCreatePhoneKey()
-  } catch (e) {
-    if (e instanceof Error && e.message === 'phone key unreadable') {
-      // Final fix A6 (ruling 32): the undecryptable value is forgotten, so
-      // the next sign-in mints a new phone key instead of hitting this
-      // same error forever.
-      await forgetPhoneKey().catch(() => {})
-      await discardSession()
-      return null
-    }
-    throw e
-  }
+  // A failed bridge/Keystore read is not evidence that a key was lost.
+  // Preserve the encrypted key and all circle state, and let the UI retry.
+  const phone = await loadOrCreatePhoneKey()
   if (phone.pkHex !== p.session.phonePk) {
     await discardSession()
     return null
   }
   await closeLiveTransport()
+  if (generation !== sessionGeneration) return null
   session = p.session
   phoneSkHex = phone.skHex
   identityTransport = lazyTransport(p.session)
@@ -383,18 +381,47 @@ export async function restore(): Promise<SessionInfo | null> {
  *  locally rather than half-cleared. The throw (if any) still propagates
  *  after that cleanup, so a caller can surface "sign-out partially
  *  failed" rather than the failure being silently swallowed. */
-export async function signOut(): Promise<void> {
-  await closeLiveTransport()
-  try {
-    await forgetPhoneKey()
-    await secretStore().remove(BUNKER_CLIENT_SK_NAME)
-    await secretStore().remove(BUNKER_URI_NAME)
-  } finally {
-    store.clear()
-    session = null
-    phoneSkHex = null
-    identityTransport = null
-  }
+export function signOut(): Promise<void> {
+  if (!endingSession) endingSession = endSession(true).finally(() => { endingSession = null })
+  return endingSession
+}
+
+async function endSession(removePhoneKey: boolean): Promise<void> {
+  sessionGeneration++
+  const transport = identityTransport
+  // Stop producers before awaiting a signer connection or native cleanup.
+  session = null
+  phoneSkHex = null
+  identityTransport = null
+  const { clearOutbox } = await import('./beacons.js')
+  clearOutbox()
+  store.clear()
+  const savedKeys = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i))
+  for (const key of savedKeys) if (key?.startsWith('kindependence.recovery.')) localStorage.removeItem(key)
+  // Closing a pending remote connection must never delay local sign-out.
+  if (transport) void transport.close().catch(() => {})
+  const results = await Promise.allSettled([
+    changeSecrets(async () => {
+      const results = await Promise.allSettled([
+        removePhoneKey ? forgetPhoneKey() : Promise.resolve(),
+        secretStore().remove(BUNKER_CLIENT_SK_NAME),
+        secretStore().remove(BUNKER_URI_NAME),
+      ])
+      const failed = results.find(r => r.status === 'rejected')
+      if (failed?.status === 'rejected') throw failed.reason
+    }),
+    import('./contacts-grant.js').then(m => m.clearForSignOut()),
+    import('./widget.js').then(m => m.clearForSignOut()),
+    import('./notify.js').then(m => m.clearForSignOut()),
+    clearWebCaches(),
+  ])
+  const failure = results.find(r => r.status === 'rejected')
+  if (failure?.status === 'rejected') throw failure.reason
+}
+
+async function clearWebCaches(): Promise<void> {
+  if (typeof caches === 'undefined') return
+  for (const key of await caches.keys()) if (key.startsWith('kindependence-')) await caches.delete(key)
 }
 
 /** Whether this code is running under the test runner (vitest sets both). */

@@ -147,9 +147,10 @@ function localSigner(sk: Uint8Array, pk: string): ContactsSigner {
  *  the write side — but a `getItem` in a locked-down browser can throw too,
  *  so both legs are guarded here rather than relying on the client's own
  *  internal guard alone). */
-function contactsStorage(): StorageIo {
+function contactsStorage(owner: ReturnType<typeof currentSession>): StorageIo {
   return {
     async get(key) {
+      if (currentSession() !== owner) return null
       try {
         return localStorage.getItem(key)
       } catch {
@@ -157,6 +158,7 @@ function contactsStorage(): StorageIo {
       }
     },
     async set(key, value) {
+      if (currentSession() !== owner) return
       try {
         localStorage.setItem(key, value)
       } catch {
@@ -202,11 +204,12 @@ export function withLiveRefresh(relay: RelayIo): RelayIo {
  *  storage. Not part of this module's documented "Produces" interface — a
  *  test-only seam, same pattern as session.ts's `setTransportFactoryForTests`. */
 async function defaultClientFactory(): Promise<SignetContactsClient> {
+  const owner = currentSession()
   const { sk, pk } = await contactsAppKey()
   return createSignetContactsClient({
     signer: localSigner(sk, pk),
     relay: withLiveRefresh(createSimplePoolRelayIo(relayPool())),
-    storage: contactsStorage(),
+    storage: contactsStorage(owner),
   })
 }
 
@@ -788,4 +791,20 @@ export function projectionToSnapshot(
     at: nowSec,
     ...(proj.truncated === true ? { truncated: true as const } : {}),
   }
+}
+
+
+export async function clearForSignOut(): Promise<void> {
+  stopGrantRuntime()
+  unsubscribeSignOutWatch?.()
+  unsubscribeSignOutWatch = null
+  sawNonEmptyGrant = false
+  liveSource?.push(EMPTY_SNAPSHOT)
+  liveSource = null
+  setContactsSource(null)
+  // Finish any old key creation before deleting the resulting secret.
+  await appKeyInFlight?.catch(() => {})
+  await secretStore().remove(APP_KEY_NAME)
+  const keys = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i))
+  for (const key of keys) if (key?.startsWith('signet-contacts:')) localStorage.removeItem(key)
 }

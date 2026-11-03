@@ -1,5 +1,4 @@
-// kindependence — native socket bridge (plan
-// internal design record: 2026-09-28-native-socket-bridge.md): the bounded,
+// kindependence — native socket bridge: the bounded,
 // seq-numbered event log kept per relay socket by SocketHub. Pure Java, no
 // Android imports, so it runs under plain JUnit.
 //

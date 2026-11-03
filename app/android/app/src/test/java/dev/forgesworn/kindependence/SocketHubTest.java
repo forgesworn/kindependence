@@ -73,6 +73,35 @@ public class SocketHubTest {
   // ---- open / send / receive lifecycle -----------------------------------
 
   @Test
+  public void rejectsNonWebsocketUrlsWithoutCreatingATransport() {
+    FakeTransportFactory factory = new FakeTransportFactory();
+    SocketHub hub = newHub(factory, new MutableClock());
+    for (String url : new String[] {"ftp://relay.example", "https://relay.example", "wss://", "wss://user@relay.example"}) {
+      try { hub.open(url); fail("accepted " + url); }
+      catch (SocketHub.HubException expected) { assertEquals("invalid-url", expected.code); }
+    }
+    assertEquals(0, factory.created.size());
+  }
+
+  @Test
+  public void closedSentinelLiftsQuarantine() {
+    FakeTransportFactory factory = new FakeTransportFactory();
+    SocketHub hub = newHub(factory, new MutableClock());
+    hub.attach("first");
+    SocketHub.SocketSnapshot socket = hub.open("wss://relay.example/");
+    FakeTransport transport = factory.created.get(0);
+    transport.listener.onOpen();
+    hub.send(socket.id, "[\"REQ\",\"sub:1\",{}]");
+    hub.attach("second");
+    String sentinel = lastSentSentinelId(transport.sent);
+    SocketHub.SocketSnapshot adopted = hub.open("wss://relay.example/");
+    long[] cursor = { adopted.seq };
+    transport.listener.onMessage("[\"CLOSED\",\"" + sentinel + "\",\"unsupported\"]");
+    transport.listener.onMessage("[\"EVENT\",\"sub:1\",{\"id\":\"help\"}]");
+    assertEquals(1, receiveNext(hub, adopted.id, cursor).size());
+  }
+
+  @Test
   public void openCreatesASocketInConnectingState() {
     FakeTransportFactory factory = new FakeTransportFactory();
     SocketHub hub = newHub(factory, new MutableClock());

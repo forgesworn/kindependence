@@ -548,7 +548,7 @@ export function evaluatePlaces(
   seedOnly: boolean = false,
   leaveApprovedUntilFor: (placeId: string) => number | undefined = () => undefined,
 ): PlaceEvalResult {
-  const nowInside = places.filter((pl) => isInside(point, placeToGeofence(pl))).map((pl) => pl.id)
+  const nowInside = places.filter(pl => classifyContainment(point, accuracyMetres, [placeToGeofence(pl)]) === 'inside' || (state.insidePlaceIds.includes(pl.id) && classifyContainment(point, accuracyMetres, [placeToGeofence(pl)]) === 'uncertain')).map(pl => pl.id)
   const nowSet = new Set(nowInside)
   const entered = seedOnly ? [] : nowInside.filter((id) => !state.insidePlaceIds.includes(id))
   const exited = seedOnly ? [] : state.insidePlaceIds.filter((id) => !nowSet.has(id))
@@ -886,7 +886,7 @@ export function decodeLeaveAreaParams(params: Record<string, string>): LeaveArea
   }
 }
 
-type ApprovedLeaves = Record<string, Array<{ placeId: string; until: number }>>
+type ApprovedLeaves = Record<string, Array<{ placeId: string; until: number; memberPk?: string }>>
 
 /** `circleId`+`placeId`'s active approval's `until` (unix seconds), or
  *  `undefined` if none is currently active — `isLeaveApproved` below is a
@@ -898,12 +898,12 @@ type ApprovedLeaves = Record<string, Array<{ placeId: string; until: number }>>
  *  the LATEST still-active `until` wins — the most generous reading, same
  *  "fail toward not punishing an already-granted leave" spirit as the rest
  *  of this feature. */
-export function leaveApprovedUntil(leaves: ApprovedLeaves, circleId: string, placeId: string, nowSecValue: number): number | undefined {
+export function leaveApprovedUntil(leaves: ApprovedLeaves, circleId: string, placeId: string, nowSecValue: number, memberPk?: string): number | undefined {
   const entries = leaves[circleId]
   if (!entries) return undefined
   let best: number | undefined
   for (const e of entries) {
-    if (e.placeId === placeId && e.until > nowSecValue && (best === undefined || e.until > best)) best = e.until
+    if (e.placeId === placeId && (memberPk === undefined || e.memberPk === memberPk) && e.until > nowSecValue && (best === undefined || e.until > best)) best = e.until
   }
   return best
 }
@@ -928,11 +928,11 @@ export function isLeaveApproved(leaves: ApprovedLeaves, circleId: string, placeI
  *  REPLACES (not appends to) any existing entry for the same placeId — a
  *  fresh approval for a place already covered simply extends/resets the
  *  window, rather than accumulating stale duplicate entries. */
-export function applyLeaveResolution(leaves: ApprovedLeaves, circleId: string, params: LeaveAreaParams, resp: { ok: boolean; at: number }): ApprovedLeaves {
+export function applyLeaveResolution(leaves: ApprovedLeaves, circleId: string, params: LeaveAreaParams, resp: { ok: boolean; at: number }, memberPk?: string): ApprovedLeaves {
   if (!resp.ok) return leaves
   const until = resp.at + params.durationMin * 60
   const existing = leaves[circleId] ?? []
-  const next = [...existing.filter((e) => e.placeId !== params.placeId), { placeId: params.placeId, until }]
+  const next = [...existing.filter((e) => e.placeId !== params.placeId || e.memberPk !== memberPk), { placeId: params.placeId, until, ...(memberPk ? { memberPk } : {}) }]
   return { ...leaves, [circleId]: next }
 }
 
@@ -1258,18 +1258,27 @@ export async function savePlaces(circleId: string, places: Place[]): Promise<voi
   const self = currentSession()
   const circle = p.circles.find((c) => c.id === circleId)
   if (!self || !circle || !isGuardian(circle, self.identityPk)) return
-  const at = nowSec()
+  const queuedTimes = p.structuralQueue.filter(q => q.action === 'places' && q.circleId === circleId).map(q => parsePlacesMetaSignal(q.payload, circleId)?.updatedAt ?? 0)
+  const at = Math.max(nowSec(), (p.placesMeta[circleId]?.updatedAt ?? 0) + 1, ...queuedTimes.map(t => t + 1))
   enqueue({ action: 'places', circleId, payload: buildPlacesMetaPayload(circleId, places, at, self.identityPk), label: `Update places for ${circle.name}` })
 }
 
+/** Apply edits to the last queued replacement, including while signing. */
+function editablePlaces(circleId: string): Place[] {
+  const p = store.load()
+  const queued = p.structuralQueue.filter(q => q.action === 'places' && q.circleId === circleId).at(-1)
+  const payload = queued ? parsePlacesMetaSignal(queued.payload, circleId) : null
+  return payload?.places ?? p.places[circleId] ?? []
+}
+
 export async function addPlace(circleId: string, draft: NewPlaceDraft): Promise<void> {
-  const current = store.load().places[circleId] ?? []
+  const current = editablePlaces(circleId)
   if (current.length >= MAX_PLACES) return
   await savePlaces(circleId, [...current, { id: newPlaceId(), ...draft }])
 }
 
 export async function deletePlace(circleId: string, placeId: string): Promise<void> {
-  const current = store.load().places[circleId] ?? []
+  const current = editablePlaces(circleId)
   await savePlaces(circleId, current.filter((pl) => pl.id !== placeId))
 }
 
@@ -1302,10 +1311,12 @@ function clearBanner(circleId: string): void {
 // ---------------------------------------------------------------------------
 
 async function sendPlaceBuzz(selfPk: string, circle: Circle, reason: string, at: number): Promise<void> {
+  const deliverySession = currentSession()
+
   const inner = await buildKindependenceMsgSignal({ groupId: circle.id, seedHex: circle.seedHex, from: selfPk, reason, timestamp: at })
   const inbox = deriveInbox(circle.seedHex)
   const wrap = await giftWrap(phoneSigner(), inbox.pk, inner, inbox.pk)
-  await beacons.publishOrEnqueue(appRelays(store.load()), wrap)
+  await beacons.publishOrEnqueue(appRelays(store.load()), wrap, { session: deliverySession, circle })
 }
 
 function recordLocalPlaceActivity(kind: 'arrival' | 'departure', circleId: string, actorPk: string, placeName: string, at: number): void {
@@ -1317,15 +1328,17 @@ function recordLocalPlaceActivity(kind: 'arrival' | 'departure', circleId: strin
  *  decide whether the episode's guardian-notification obligation is
  *  actually satisfied, rather than assuming it is the instant this is
  *  called. */
-async function sendBreachSignal(circle: Circle): Promise<boolean> {
+async function sendBreachSignal(circle: Circle, placeName: string, at: number, selfPk: string, episodeId: string): Promise<beacons.Delivery | null> {
+  const deliverySession = currentSession()
+  if (beacons.hasQueuedBreach(circle.id, placeName)) return 'queued'
+
   const fix = beacons.selfFix()
-  if (!fix) return false // nothing to disclose yet — caller retries next tick
+  if (!fix) return null // nothing to disclose yet — caller retries next tick
   const geohash = encodeGeohash(fix.lat, fix.lon, BREACH_PRECISION)
   const inner = await buildLocationSignal({ groupId: circle.id, seedHex: circle.seedHex, signalType: SIGNAL_TYPES.breach, geohash, precision: BREACH_PRECISION })
   const inbox = deriveInbox(circle.seedHex)
   const wrap = await giftWrap(phoneSigner(), inbox.pk, inner, inbox.pk)
-  await beacons.publishOrEnqueue(appRelays(store.load()), wrap)
-  return true
+  return beacons.publishOrEnqueue(appRelays(store.load()), wrap, { session: deliverySession, circle, breach: { circleId: circle.id, placeName, at, selfPk, episodeId } })
 }
 
 function applyEscalationEffect(circle: Circle, selfPk: string, effect: EscalationEffect, at: number): void {
@@ -1396,15 +1409,28 @@ async function ensureBreachSent(circle: Circle, selfPk: string, placeName: strin
       markBreachSent(circle.id)
       return
     }
-    const sent = await sendBreachSignal(circle)
-    if (!sent) return // still no fix — leave breachSent false, tick() retries
-    activity.recordActivity({ id: activity.localActivityId('safe-area-escalation', at, circle.id), at, kind: 'safe-area-escalation', circleId: circle.id, actorPk: selfPk, params: { place: placeName } })
-    void notify('safe-area-escalation', selfPk, 'Your circle has been told', escalatedChildCopy(placeName, false))
-    store.update((p) => { p.placeLastEscalatedAt = { ...p.placeLastEscalatedAt, [key]: at } })
-    markBreachSent(circle.id)
+    let episodeId = store.load().settings.placeEpisodeIds?.[circle.id]
+    if (!episodeId) {
+      episodeId = crypto.randomUUID()
+      store.update(p => { p.settings.placeEpisodeIds = { ...p.settings.placeEpisodeIds, [circle.id]: episodeId! } })
+    }
+    const delivery = await sendBreachSignal(circle, placeName, at, selfPk, episodeId)
+    if (delivery === 'sent') confirmBreachDelivery({ circleId: circle.id, placeName, at, selfPk, episodeId })
+
   } finally {
     breachSendInFlight.delete(circle.id)
   }
+}
+
+export function confirmBreachDelivery({ circleId, placeName, at, selfPk, episodeId }: { circleId: string; placeName: string; at: number; selfPk: string; episodeId: string }): void {
+  if (currentSession()?.identityPk !== selfPk || store.load().settings.placeEpisodeIds?.[circleId] !== episodeId) return
+  const key = `${circleId}:${placeName}`
+  activity.recordActivity({ id: activity.localActivityId('safe-area-escalation', at, circleId), at, kind: 'safe-area-escalation', circleId, actorPk: selfPk, params: { place: placeName } })
+  store.update(p => { p.placeLastEscalatedAt = { ...p.placeLastEscalatedAt, [key]: at } })
+  const state = evalState.get(circleId)
+  if (state?.escalation.phase !== 'escalated' || state.escalation.placeName !== placeName) return
+  void notify('safe-area-escalation', selfPk, 'Your circle has been told', escalatedChildCopy(placeName, false))
+  markBreachSent(circleId)
 }
 
 /** Flips circleId's in-memory (and, via `syncPersistedEscalation`,
@@ -1706,7 +1732,7 @@ export async function tick(): Promise<void> {
   // correctness dependency (see `pruneExpiredLeaves`'s own doc comment).
   const prunedLeaves = pruneExpiredLeaves(p.approvedLeaves, at)
   if (prunedLeaves !== p.approvedLeaves) store.update((sp) => { sp.approvedLeaves = prunedLeaves })
-  const leaveApprovedUntilFor = (circleId: string) => (placeId: string) => leaveApprovedUntil(prunedLeaves, circleId, placeId, at)
+  const leaveApprovedUntilFor = (circleId: string) => (placeId: string) => leaveApprovedUntil(prunedLeaves, circleId, placeId, at, self.identityPk)
 
   for (const circle of p.circles) {
     const places = p.places[circle.id] ?? []
@@ -1741,11 +1767,17 @@ export async function tick(): Promise<void> {
     // evaluated against THIS tick's `state.insidePlaceIds` (the prior
     // tick's value, unchanged, when there's no fresh fix — see
     // `evaluateArrivalWindows`'s own doc comment).
-    if (escalationEnabled) {
+    if (escalationEnabled && fix) {
       evaluateArrivalWindows(circle, self.identityPk, places, state.insidePlaceIds, result.entered, at)
     }
 
-    if (state.escalation.phase === 'safe') clearBanner(circle.id)
+    if (state.escalation.phase === 'safe') {
+      clearBanner(circle.id)
+      if (fix) {
+        beacons.clearQueuedBreaches(circle.id)
+        if (store.load().settings.placeEpisodeIds?.[circle.id]) store.update(p => { delete p.settings.placeEpisodeIds?.[circle.id] })
+      }
+    }
     if (result.escalationEffect) applyEscalationEffect(circle, self.identityPk, result.escalationEffect, at)
 
     // Grace expiry is time-based, independent of whether `evaluatePlaces` ran
@@ -1946,6 +1978,8 @@ export function recordIncomingWindowEvent(circle: Circle, actorPk: string, place
  *  every other wire send in this codebase. */
 export function registerStructuralSenders(): void {
   registerSender('places', async (signed, item) => {
+    const deliverySession = currentSession()
+
     const c = store.load().circles.find((x) => x.id === item.circleId)
     if (!c) return
     await beacons.sendStructural(c, signed)
@@ -1957,7 +1991,7 @@ export function registerStructuralSenders(): void {
     // Final fix round 3, F2: the local apply, only now that it has gone out.
     applyIncomingPlaces(c.id, meta.places, meta.updatedAt, meta.by)
     const fencesWrap = await buildPlacesFencesWrap(phoneSigner(), c, meta.places, meta.updatedAt, meta.by)
-    await beacons.publishOrEnqueue(appRelays(store.load()), fencesWrap)
+    await beacons.publishOrEnqueue(appRelays(store.load()), fencesWrap, { session: deliverySession, circle: c })
   })
 }
 
@@ -1988,8 +2022,8 @@ export function ensure(): void {
     const params = decodeLeaveAreaParams(resolution.req.params)
     if (!params) return
     const { circleId, resp } = resolution
-    store.update((p) => { p.approvedLeaves = applyLeaveResolution(p.approvedLeaves, circleId, params, resp) })
-    if (resp.ok) applyLeaveApprovalToEscalation(circleId, params.placeId, params.placeName, resp.at + params.durationMin * 60)
+    store.update((p) => { p.approvedLeaves = applyLeaveResolution(p.approvedLeaves, circleId, params, resp, resolution.req.from) })
+    if (resp.ok && resolution.req.from === currentSession()?.identityPk) applyLeaveApprovalToEscalation(circleId, params.placeId, params.placeName, resp.at + params.durationMin * 60)
   })
   void tick() // don't make a just-added place wait out a stale up-to-30s-old tick
   setInterval(() => { void tick() }, TICK_INTERVAL_MS)
@@ -2250,7 +2284,7 @@ function placeRowView(circleId: string, pl: Place, canManage: boolean): string {
 // ---------------------------------------------------------------------------
 
 async function updatePlaceWindows(circleId: string, placeId: string, fn: (windows: ArrivalWindow[]) => ArrivalWindow[]): Promise<void> {
-  const current = store.load().places[circleId] ?? []
+  const current = editablePlaces(circleId)
   const next = current.map((pl) => (pl.id === placeId ? { ...pl, arrivalWindows: fn(pl.arrivalWindows ?? []) } : pl))
   await savePlaces(circleId, next)
 }

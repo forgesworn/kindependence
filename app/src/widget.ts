@@ -337,3 +337,11 @@ export function ensure(p: store.Persisted): void {
   store.subscribe(scheduleDebouncedPush)
   void pushStatus(p)
 }
+
+
+export async function clearForSignOut(): Promise<void> {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  debounceTimer = null
+  hasPushedOnce = true
+  await pushStatus(store.load())
+}

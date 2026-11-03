@@ -1,5 +1,4 @@
-// kindependence — native socket bridge (plan
-// internal design record: 2026-09-28-native-socket-bridge.md): the
+// kindependence — native socket bridge: the
 // Capacitor-facing half of the bridge. All the actual state — sockets,
 // logs, orphan handling — lives in SocketHub, the process singleton;
 // this class only translates PluginCall <-> SocketHub's plain Java types,
@@ -197,6 +196,7 @@ public class RelaySocketPlugin extends Plugin implements SocketHub.Sink {
       call.reject("active is required");
       return;
     }
+    getContext().getSharedPreferences(ResumeReceiver.PREFS, Context.MODE_PRIVATE).edit().putBoolean(ResumeReceiver.RESUME, active).apply();
     if (!active) {
       SocketHub.getInstance().deactivateAll();
       stopRelayService();
@@ -212,20 +212,19 @@ public class RelaySocketPlugin extends Plugin implements SocketHub.Sink {
       // required notification is visible.
       requestPermissionForAlias("notifications", call, "onNotificationsPermission");
     } else {
-      startRelayService();
-      call.resolve();
+      startRelayService(call);
     }
   }
 
   @PermissionCallback
   private void onNotificationsPermission(PluginCall call) {
-    startRelayService();
-    call.resolve();
+    startRelayService(call);
   }
 
   // ---- helpers -----------------------------------------------------------
 
-  private void startRelayService() {
+  private void startRelayService(PluginCall call) {
+    try {
     Context ctx = getContext();
     Intent intent = new Intent(ctx, RelaySocketService.class);
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -233,6 +232,8 @@ public class RelaySocketPlugin extends Plugin implements SocketHub.Sink {
     } else {
       ctx.startService(intent);
     }
+    call.resolve();
+    } catch (RuntimeException e) { call.reject("Could not start relay service", "service-unavailable", e); }
   }
 
   private void stopRelayService() {

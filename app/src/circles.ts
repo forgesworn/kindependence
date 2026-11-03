@@ -7,21 +7,11 @@
 // pass; `handleAction()` is the click dispatcher app.ts delegates
 // `circle-*` actions to.
 //
-// Roster model (binding — see covey-kit's circle.ts): `mergeConfig` is a
-// latest-wins FULL REPLACEMENT of the member list, not a CRDT union. Two
-// devices independently broadcasting partial views of the roster can clobber
-// each other. So every membership change here has exactly ONE writer: the
-// device performing the change (invite-send) locally updates the roster via
-// `upsertMember`, then sends the resulting FULL config as an identity-signed
-// structural `config` event (Signet identity plan, Task 8: queued for the
-// identity signer, then posted on the circle inbox — `enqueueConfig`).
-// Removals are re-keys (`sendRekey`, spec 3 §5), not config writes. A device
-// that only just joined never broadcasts its
-// own (necessarily incomplete) view — it waits to receive the authoritative
-// one. covey's `upsertMember`/`removeMember` do NOT bump
-// `configUpdatedAt`/`configBy` themselves (see `addLocalMember`/
-// `removeLocalMember` below) — every call site here does that explicitly so
-// the latest-wins clock actually reflects the change.
+// Roster configs carry full snapshots. This app merges additions so a stale
+// guardian snapshot cannot remove another member. Only the writer's own
+// omission is a leave; other removals require a re-key. Self-leaves carry
+// signed-time tombstones so an older config cannot resurrect the member.
+// Scalar fields retain the config clock's latest-wins ordering.
 //
 // Invites (Signet identity plan, Task 10; plan 2, Task 6): identity-signed.
 // `doInvite` queues a structural `invite` inner event (structural.ts) for
@@ -1628,8 +1618,10 @@ export function removalPending(circleId: string, pk: string): boolean {
  *  `{ struct, seed }` — the seed is phone-sealed, never signed) to
  *  `phonePk`'s own inbox, sealed by this phone. */
 async function wrapRekeyTo(signed: SignedEvent, seed: string, phonePk: string): Promise<void> {
+  const deliverySession = currentSession()
+
   const wrap = await giftWrap(phoneSigner(), phonePk, { kind: KINDS.signal, tags: [['t', 'struct']], content: JSON.stringify({ struct: signed, seed }) }, personalInboxTag(phonePk))
-  await beacons.publishOrEnqueue(appRelays(store.load()), wrap)
+  await beacons.publishOrEnqueue(appRelays(store.load()), wrap, { session: deliverySession, personal: true, recipientPhonePk: phonePk })
 }
 
 /** The structural queue's sender for `rekey`. A re-key signed against a
@@ -1640,6 +1632,8 @@ async function wrapRekeyTo(signed: SignedEvent, seed: string, phonePk: string): 
  *  (this phone included, so a restart inside the window still receives it
  *  from the relay), and offered to this device's own collection window. */
 async function sendRekeyEvent(signed: SignedEvent, circleId: string, seed: string | undefined): Promise<void> {
+  const deliverySession = currentSession()
+
   const ev = verifyStructural(signed)
   const c = store.load().circles.find((x) => x.id === circleId)
   if (!ev || ev.action !== 'rekey' || !c) return
@@ -1927,6 +1921,9 @@ function applyRekey(circleId: string, { ev, payload, seed }: RekeyCandidate, mod
     // installed starts now, at the re-key's own signed created_at.
     const next: store.StoredCircle = { ...rotated, members: members.filter((m) => !tomb.has(m.pk)), removedPks, removals, epochStartedAt: ev.event.created_at }
     sp.circles[idx] = next
+    if (next.members.some(m => m.pk === currentSession()?.identityPk)) {
+      sp.settings.removalNotices = sp.settings.removalNotices?.filter(n => n.circleId !== circleId)
+    }
     const chain = sp.seedHashes[circleId] ?? [ev.prev]
     sp.seedHashes = { ...sp.seedHashes, [circleId]: chain.includes(newHash) ? chain : [...chain, newHash] }
     sp.seedRecipients = { ...sp.seedRecipients, [circleId]: payload.to }
@@ -1969,7 +1966,20 @@ function applyRekey(circleId: string, { ev, payload, seed }: RekeyCandidate, mod
     rejudgeVouched(rescan, new Set(removedNow), Math.min(ev.event.created_at, now))
     rescanBuffered(rescan, now)
   }
+  if (applied && mine) {
+    const phones = Object.entries(store.load().lastRekey[circleId]?.before.phones ?? {}).filter(([, b]) => payload.removals.includes(b.memberPk)).map(([pk]) => pk)
+    void sendRemovalNotices(ev.event, phones).catch(() => {})
+  }
   return applied
+}
+
+async function sendRemovalNotices(signed: SignedEvent, phones: string[]): Promise<void> {
+  const deliverySession = currentSession()
+  if (!deliverySession) return
+  for (const phonePk of phones) {
+    const wrap = await giftWrap(phoneSigner(), phonePk, { kind: KINDS.signal, tags: [['t', 'kindependence-removed']], content: JSON.stringify({ struct: signed }) }, personalInboxTag(phonePk))
+    await beacons.publishOrEnqueue(appRelays(store.load()), wrap, { session: deliverySession, personal: true, recipientPhonePk: phonePk })
+  }
 }
 
 function memberRemovedActivityId(circleId: string, pk: string, prev: string): string {
@@ -2005,6 +2015,23 @@ export async function onPhoneInboxWrap(e: { pubkey: string; content: string }): 
   const rumor = await giftUnwrap((pk, ct) => signer.nip44Decrypt(pk, ct), e)
   if (!rumor) return
   if (rumor.id && seenPhoneRumorIds.has(rumor.id)) return
+  if (rumor.tags.find(t => t[0] === 't')?.[1] === 'kindependence-removed') {
+    let content: { struct?: unknown }
+    try { content = JSON.parse(rumor.content) } catch { return }
+    const ev = verifyStructural(content.struct)
+    const circle = ev ? store.load().circles.find(c => c.id === ev.circleId) : undefined
+    const payload = ev ? parseRekeyPayload(ev.payload) : null
+    if (!ev || ev.action !== 'rekey' || !circle || !payload || payload.id !== circle.id
+      || !payload.removals.includes(self.identityPk) || ev.event.created_at > nowSec() + 600
+      || memberForPhone(circle.id, rumor.pubkey) !== ev.signerPk
+      || seedHash(circle.seedHex) !== ev.prev
+      || !structuralAuthorised(trustViewOf(circle), ev, nowSec())) return
+    // A re-invite signed after this decision supersedes the removal.
+    if (circle.configUpdatedAt > ev.event.created_at && circle.seedHex !== undefined && seedHash(circle.seedHex) !== ev.prev) return
+    store.update(p => { p.settings.removalNotices = [...(p.settings.removalNotices ?? []).filter(n => n.circleId !== circle.id), { circleId: circle.id, name: circle.name, at: ev.event.created_at }] })
+    if (rumor.id) markPhoneRumorSeen(rumor.id)
+    return
+  }
   // Plan 2 (Task 6): a guardian's invite to a dependant arrives here — a
   // dependant has no personal inbox.
   const invite = parseIncomingInvite(rumor)
@@ -2424,10 +2451,19 @@ export function registerConfigSentHandler(fn: ConfigSentHandler): void {
 /** Latest-wins config merge (covey `mergeConfig`'s rule, for v2): applied
  *  when newer, or as new with a lower writer pubkey. Returns `c` itself
  *  when it loses. */
-function mergeConfigV2(c: Circle, cfg: ConfigV2): Circle {
+export function mergeConfigV2(c: Circle, cfg: ConfigV2): Circle {
   const wins = cfg.updatedAt > c.configUpdatedAt || (cfg.updatedAt === c.configUpdatedAt && cfg.by < c.configBy)
-  if (!wins) return c
-  return { ...c, name: cfg.name, members: cfg.members.map((m) => ({ ...m })), configUpdatedAt: cfg.updatedAt, configBy: cfg.by }
+  const members = new Map(c.members.map(m => [m.pk, m]))
+  let added = false
+  for (const member of cfg.members) {
+    if (!members.has(member.pk)) { members.set(member.pk, { ...member }); added = true }
+    else if (wins) members.set(member.pk, { ...member })
+  }
+  // Config omission is not a removal authority. Only the writer can leave
+  // by omission; removing another member requires a signed re-key.
+  if (wins && !cfg.members.some(m => m.pk === cfg.by)) members.delete(cfg.by)
+  if (!wins && !added) return c
+  return { ...c, name: wins ? cfg.name : c.name, members: [...members.values()], configUpdatedAt: wins ? cfg.updatedAt : c.configUpdatedAt, configBy: wins ? cfg.by : c.configBy }
 }
 
 /** Applies an authorised structural config (the choke point has checked the
@@ -2489,6 +2525,10 @@ function applyConfig(circleId: string, rumor: Rumor): void {
       if (readmit) { delete removals[pk]; continue }
       removedPks.push(pk)
       out.add(pk)
+    }
+    if (c.members.some(m => m.pk === cfg.by) && !merged.members.some(m => m.pk === cfg.by)) {
+      removals[cfg.by] = { at: rumor.created_at, hash: prev ?? seedHash(c.seedHex) }
+      if (!removedPks.includes(cfg.by)) removedPks.push(cfg.by)
     }
     const next: store.StoredCircle = {
       ...merged,
@@ -3030,9 +3070,16 @@ async function sendInvite(signed: SignedEvent, item: store.QueuedAction): Promis
   if (inner.role === 'child') {
     const phones = knownPhonesOf(recipientPk)
     if (!phones.length) { setInviteNotice(c.id, 'No phone of theirs is known here yet.'); return }
-    for (const ph of phones) await publish(relays, await giftWrap(phoneSigner(), ph, rumor, personalInboxTag(ph)))
+    for (const ph of phones) {
+      const wrap = await giftWrap(phoneSigner(), ph, rumor, personalInboxTag(ph))
+      const latest = store.load()
+      if (currentSession() !== self || latest.circles.find(x => x.id === c.id)?.seedHex !== c.seedHex || latest.revokedPhoneKeys[ph]) throw new Error('invite context changed')
+      await publish(relays, wrap)
+    }
   } else {
-    await publish(relays, await giftWrap(phoneSigner(), recipientPk, rumor, personalInboxTag(recipientPk)))
+    const wrap = await giftWrap(phoneSigner(), recipientPk, rumor, personalInboxTag(recipientPk))
+    if (currentSession() !== self || store.load().circles.find(x => x.id === c.id)?.seedHex !== c.seedHex) throw new Error('invite context changed')
+    await publish(relays, wrap)
   }
   // A new member: the vouch goes into the circle before the config.
   const fresh0 = store.load().circles.find((x) => x.id === item.circleId)

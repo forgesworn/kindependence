@@ -97,8 +97,8 @@
           </li>
           <li class="promise">
             <span class="promise__n" aria-hidden="true">2</span>
-            <h3>They hear first.</h3>
-            <p>If they leave a safe area, their phone warns them privately, with a grace period, before anyone else is told. It's worded as a heads-up, never as an&nbsp;accusation.</p>
+            <h3>A private heads-up.</h3>
+            <p>Safe areas can warn them privately with a grace period before telling the circle. An area set to immediate alerts tells the circle at once. It's worded as a heads-up, never as an&nbsp;accusation.</p>
           </li>
           <li class="promise">
             <span class="promise__n" aria-hidden="true">3</span>
@@ -134,25 +134,25 @@
             <p>Say Sam leaves school earlier than usual. A hovering app tells you at once, and Sam finds out afterwards, if ever. Kindependence tells <strong>Sam</strong>&nbsp;first.</p>
             <ol class="flow" role="list">
               <li><span>1</span><p><strong>Sam gets a private heads-up.</strong> Nobody else sees it, and the clock is visible to&nbsp;them.</p></li>
-              <li><span>2</span><p><strong>Sam can answer in one tap,</strong> before the grace period runs&nbsp;out.</p></li>
-              <li><span>3</span><p><strong>You hear what Sam said,</strong> not just that a line was&nbsp;crossed.</p></li>
+              <li><span>2</span><p><strong>Sam can open the app and ask to go out,</strong> before the grace period runs&nbsp;out.</p></li>
+              <li><span>3</span><p><strong>You can review the request,</strong> and agree how long they can be&nbsp;out.</p></li>
             </ol>
-            <p class="dim">A moment of "I'm fine, going to Jo's" in place of twenty minutes of worry. That's the whole&nbsp;idea.</p>
+            <p class="dim">A chance to agree a change of plan before an alert goes out. That's the whole&nbsp;idea.</p>
           </div>
           <div class="ask__demo" aria-label="Example: a child gets a private notice first and tells the family they're fine; the parent then sees what the child said">
             <div class="screen screen--lock">
               <p class="screen__who">Sam's phone · only Sam sees this</p>
               <svg class="screen__flame" viewBox="0 0 48 48" aria-hidden="true"><use href="#flame-norm"/></svg>
               <p class="screen__t">Heads up, Sam</p>
-              <p class="screen__s">You've left the area around school earlier than usual. Your family will be told in 10 minutes — unless you tell them&nbsp;first.</p>
-              <span class="screen__btn">Tell them I'm fine</span>
+              <p class="screen__s">You've left the area around school earlier than usual. Your family will be told in 10 minutes. Open the app to request a change of&nbsp;plan.</p>
+              <span class="screen__btn">Open app to ask to go out</span>
             </div>
             <div class="arrow" aria-hidden="true">→</div>
             <div class="screen screen--phone">
               <p class="screen__who">Mum's phone</p>
               <p class="screen__app">Kindependence</p>
               <p class="screen__t screen__t--sm">Sam left school · 15:12</p>
-              <p class="screen__quote">Sam saw this first and says: I'm fine, going to&nbsp;Jo's.</p>
+              <p class="screen__quote">Sam asks to go to Jo's for 30 minutes. Review the request in the&nbsp;app.</p>
             </div>
           </div>
         </div>
@@ -168,7 +168,7 @@
           <li><h3>Battery, shared</h3><p>On by default for children, and a single low-battery heads-up to the family at 15%.</p></li>
           <li><h3>Quiet hours</h3><p>Ordinary notifications are held during the hours you set. An SOS, a precise-location request and a pickup always come&nbsp;through.</p></li>
           <li><h3>Age-based starting points</h3><p>Under 10, 10–13 or 14 and up: a plain summary of what each setting changes, before you apply&nbsp;it.</p></li>
-          <li><h3>Leave reminders <span class="pill">On their phone</span></h3><p>"Leave now to make school by 08:45." Worked out on your child's own device and never sent&nbsp;anywhere.</p></li>
+          <li><h3>Leave reminders <span class="pill">On their phone</span></h3><p>"Leave now to make school by 08:45." Worked out on their device. If you configure a routing server, it receives the location and&nbsp;destination.</p></li>
           <li><h3>Home-screen widget <span class="pill">Android</span></h3><p>Up to four family members at a glance: whether they're live, and how their battery&nbsp;is.</p></li>
         </ul>
 
@@ -196,7 +196,7 @@
               <li><b class="dot" aria-hidden="true">•</b><p><strong>Encrypted, not invisible.</strong> Circle traffic travels encrypted over relays. The relays can still see timing, IP addresses and other&nbsp;metadata.</p></li>
               <li><b class="dot" aria-hidden="true">•</b><p><strong>Members keep what they've received.</strong> Signing out can't recall a location someone already&nbsp;has.</p></li>
               <li><b class="dot" aria-hidden="true">•</b><p><strong>Leave reminders are a rough guide.</strong> Unless you run your own routing engine, travel time is a straight-line estimate, not a real&nbsp;route.</p></li>
-              <li><b class="dot" aria-hidden="true">•</b><p><strong>Android and web first.</strong> No store listing and no date, and we won't invent&nbsp;one.</p></li>
+              <li><b class="dot" aria-hidden="true">•</b><p><strong>Android builds, with a web development preview.</strong> No store listing and no date, and we won't invent&nbsp;one.</p></li>
             </ul>
           </div>
         </div>
@@ -211,7 +211,7 @@
         <div class="faq">
           <details>
             <summary>Is it ready?</summary>
-            <p>Not in the app stores yet. Kindependence is in development, with Android and web first, and there's no store date, because we'd rather say "on its way" than guess. The code is open on GitHub, so you can build the Android app yourself&nbsp;today.</p>
+            <p>Not in the app stores yet. Kindependence is in development, for Android, with a web development preview and no hosted app or iPhone support, and there's no store date, because we'd rather say "on its way" than guess. The code is open on GitHub, so you can build the Android app yourself&nbsp;today.</p>
           </details>
           <details>
             <summary>Who can see where my child is?</summary>
@@ -219,7 +219,7 @@
           </details>
           <details>
             <summary>Does it use Google Maps?</summary>
-            <p>No. By default the map tiles come from OpenStreetMap. That means OpenStreetMap's tile server can see the viewer's IP address and which areas of the map are being looked at. The tile source can be changed by whoever runs the&nbsp;app.</p>
+            <p>The map uses OpenStreetMap tiles by default. Android location sampling uses Google Play location services, and Navigate may open Google Maps or another installed navigation app. That means OpenStreetMap's tile server can see the viewer's IP address and which areas of the map are being looked at. The tile source can be changed by whoever runs the&nbsp;app.</p>
           </details>
           <details>
             <summary>Can my child switch it off?</summary>

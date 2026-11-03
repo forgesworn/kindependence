@@ -279,6 +279,7 @@ function resolutionActivityEvent(req: ApprovalReq, resp: ApprovalResp, circleId:
  *  reference when the incoming policy doesn't win, so callers can skip a
  *  write (same idiom as agreements.ts's dedupe-by-identity checks). */
 export function upsertFamilyPolicy(policies: Record<string, FamilyPolicy>, incoming: FamilyPolicy): Record<string, FamilyPolicy> {
+  if (incoming.updatedAt > nowSec() + 600) return policies
   const current = policies[incoming.circleId]
   const winner = latestPolicy(current, incoming)
   if (winner === current) return policies
@@ -474,6 +475,8 @@ function applySentFamilyPolicy(circleId: string, policy: FamilyPolicy): void {
  *  "waiting for a parent" pending state is just this id's record in
  *  `p.approvals` with no `resolved` yet — nothing further to track). */
 export async function raiseApproval(circleId: string, action: PolicyAction, params: Record<string, string>): Promise<string | null> {
+  const deliverySession = currentSession()
+
   const p = store.load()
   const self = currentSession()
   const circle = p.circles.find((c) => c.id === circleId)
@@ -485,7 +488,7 @@ export async function raiseApproval(circleId: string, action: PolicyAction, para
   store.update((sp) => { sp.approvals = upsertApprovalReq(sp.approvals, req, circleId, self.phonePk) })
   activity.recordActivity(requestActivityEvent(req, at, circleId, self.identityPk, `local-approval-requested-${req.id}`))
   const wrap = await broodWrap(phoneSigner(), circle, req, at)
-  await beacons.publishOrEnqueue(relaysFor(p), wrap)
+  await beacons.publishOrEnqueue(relaysFor(p), wrap, { session: deliverySession, circle })
   return req.id
 }
 
@@ -737,7 +740,7 @@ export function policyView(p: store.Persisted, fam: SessionInfo): string {
 
 function policySectionView(p: store.Persisted, circle: Circle): string {
   const policy = p.familyPolicies[circle.id]
-  const rows = POLICY_ACTIONS.map((action) => policyRowView(circle.id, action, evaluatePolicy(policy, action))).join('')
+  const rows = POLICY_ACTIONS.filter(action => action === 'create-circle').map((action) => policyRowView(circle.id, action, evaluatePolicy(policy, action))).join('')
   const notice = policyNotice[circle.id] ? `<p class="muted">${esc(policyNotice[circle.id] as string)}</p>` : ''
   return `
     <div class="policy-circle">

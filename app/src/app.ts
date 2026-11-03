@@ -31,6 +31,7 @@ import * as beacons from './beacons.js'
 import * as poolHealth from './pool-health.js'
 import * as relayWatch from './relay-watch.js'
 import * as safety from './safety.js'
+import * as watchdog from './watchdog.js'
 import * as agreements from './agreements.js'
 import * as approvals from './approvals.js'
 import * as activity from './activity.js'
@@ -191,7 +192,17 @@ export async function mount(el: HTMLElement): Promise<void> {
   // resumePendingRemovals(), refreshStatements()) must never hold up the
   // first paint. Errors are caught and logged here rather than left to
   // reject an unawaited promise silently.
-  const restored = await session.restore()
+  let restored: SessionInfo | null
+  try {
+    restored = await session.restore()
+  } catch {
+    root.innerHTML = '<main class="screen"><h1>Unlock this phone to resume</h1><p>Your saved circles are still here. The secure key could not be read. Unlock the phone and try again.</p><button type="button" id="retry-restore">Try again</button><button type="button" id="reset-restore">Sign out and reconnect</button></main>'
+    root.querySelector('#retry-restore')?.addEventListener('click', () => { location.reload() })
+    root.querySelector('#reset-restore')?.addEventListener('click', () => {
+      if (window.confirm('Signing out removes this phone’s saved circles, locations, contacts and queued alerts. You will need to sign in and join your circles again. Continue?')) void signin.doSignOut().then(() => location.reload())
+    })
+    return
+  }
   render()
   if (restored) void runBootAfterSignIn()
   // Plan 2, Task 2: the contacts grant is a local, per-device pairing
@@ -227,6 +238,7 @@ async function runBootAfterSignIn(): Promise<void> {
 
 /** Switches the active tab and re-renders. */
 export function showTab(name: Tab): void {
+  if (messages.isOpen()) messages.closeThread()
   tab = name
   if (name === 'map') {
     // Phase 6 Task 1 hook 1/2 (design spec §1, brief §2.3): a Map-tab
@@ -268,6 +280,16 @@ function wireActions(el: HTMLElement): void {
 }
 
 function render(): void {
+  try { renderUnsafe() }
+  catch (error) {
+    console.error('Could not display the current screen', error)
+    if (!root) return
+    root.innerHTML = `<main class="screen"><h1>Could not display this screen</h1><p>Reopen the app to try again. Your saved data has been kept.</p>${safety.sosButtonView()}</main>`
+    safety.wireSos(root)
+  }
+}
+
+function renderUnsafe(): void {
   if (!root) return
   const p = store.load()
   // Pool-health seeds its staleness clock right before circles.ensure/
@@ -334,6 +356,7 @@ function render(): void {
   // beacons.ensure above just started, rather than opening a second one).
   // Idempotent and identity-independent — safe to call every render.
   safety.ensure()
+  watchdog.ensure()
   // Agreements registers its own incoming-signal handler alongside safety's
   // (beacons.ts's `setSignalHandler` appends rather than overwrites — see its
   // doc comment) and starts the 60s arrival/late-check timer. Also
@@ -415,7 +438,7 @@ function render(): void {
     signin.mountScanner()
     return
   }
-  const replaced = formState.renderInto(root, `<main class="screen">${screenView(p)}</main>${navView(p)}`, document.activeElement, keepUnfocused)
+  const replaced = formState.renderInto(root, `<main class="screen">${store.storageFailed() ? '<p role="alert">This phone could not save your changes. Keep the app open and free some storage.</p>' : ''}${nativeGeo.sharingError() ? `<p role="alert">${nativeGeo.sharingError()}</p>` : ''}${store.hasRecoveryCopy() ? '<p role="alert">Some saved data could not be read. The original has been kept on this phone for recovery.</p>' : ''}${safety.activeAlertsView(p)}${screenView(p)}</main>${((tab === 'activity' || tab === 'you' || messages.isOpen() || wizard.isOpen()) && p.circles.length) ? `<aside class="shell-sos">${safety.sosButtonView()}</aside>` : ''}${navView(p)}`, document.activeElement, keepUnfocused)
   if (replaced) {
     wireActions(root)
     // The SOS button is long-press (pointerdown/up timing), not click — wired
@@ -458,8 +481,8 @@ const CLEAR_ROUTINE_CONFIRM_ACTIONS = new Set([
 const actionEpoch = new formState.ActionEpoch()
 
 function handleAction(node: HTMLElement): void {
-  actionEpoch.noteAction()
   const action = node.dataset.action
+  if (!action?.includes('submit') && action !== 'msg-send') actionEpoch.noteAction()
   if (action && !CLEAR_ROUTINE_CONFIRM_ACTIONS.has(action)) activity.resetClearRoutineConfirm()
   if (action === 'tab') {
     const next = node.dataset.tab as Tab | undefined
@@ -1112,7 +1135,7 @@ function updateMapLayers(p: store.Persisted, selectedCircles: Circle[]): void {
     if (mapinfo.isPrecise(entry.pos.precision)) {
       points.push({ pubkey: pk, lat, lon, label: `${name} · ${ageLabel(entry.pos.at, now)}` })
     } else {
-      areas.push({ pubkey: pk, geohash: entry.pos.geohash, label: `${name} · ${mapinfo.precisionTerm(entry.pos.precision)}` })
+      areas.push({ pubkey: pk, geohash: entry.pos.geohash, label: `${name} · ${mapinfo.precisionTerm(entry.pos.precision)} · ${ageLabel(entry.pos.at, now)}` })
     }
     // Task 4 (brief §7.5): only live/recent (or their approximate variants)
     // get an edge chip — §7.5 is about where people ARE right now, not a
@@ -1920,13 +1943,11 @@ function nativeLocationNoticeView(): string {
     <section class="contact-group">
       <h2>Location while closed</h2>
       <p class="muted small">
-        On this device, sharing keeps your circle updated even while kindependence
-        is closed or your screen is off — the same sharing you've already set
-        up, just uninterrupted. Android shows a small ongoing notification
-        while this is active, so it's never invisible. This can use a little
-        more battery than sharing only while the app is open; if your device
-        offers a battery-optimisation exemption for kindependence, allowing it
-        helps sharing stay reliable in the background.
+        Android can pause updates when the screen is off, the app is closed,
+        or the phone restarts. An ongoing notification does not confirm that
+        updates are reaching your circle. Open Kindependence to resume and
+        check the last-update age on the other phone. Native location sampling
+        uses Google Play location services and can increase battery use.
       </p>
     </section>
   `

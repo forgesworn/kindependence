@@ -1,6 +1,5 @@
-// Who may perform which structural action: the full authority table of
-// internal design record: 2026-09-25-kindependence-contacts-circles-design.md
-// §4 (plan 2, Task 5). Pure: every check reads only a `TrustView` (the
+// Who may perform each structural action. Pure: every check reads a
+// `TrustView` (the
 // circle's roster before the action, its creator, stored vouches, guardian
 // links, unvouched marks) and the verified inner event, so the receive
 // choke point (beacons.ts `receiveStructural`) and the phone-inbox re-key
@@ -216,6 +215,8 @@ export function configVerdict(view: TrustView, circleId: string, signerPk: strin
   const ownNext = next.get(signerPk)
   if (ownNext !== undefined && rank(ownNext) > rank(signerRole)) return 'refused'
   for (const m of view.members) {
+    const named = cfg.members.find(n => n.pk === m.pk)
+    if (named && named.name !== m.name && signerPk !== m.pk && !guardian) return 'refused'
     const role = next.get(m.pk)
     if (role === undefined) {
       if (!mayRemove(view, signerPk, m.pk, nowSec)) return 'refused'

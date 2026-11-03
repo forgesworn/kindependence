@@ -1,5 +1,4 @@
-// kindependence — native socket bridge (plan
-// internal design record: 2026-09-28-native-socket-bridge.md): the
+// kindependence — native socket bridge: the
 // process-wide singleton that owns every relay WebSocket. Pure Java (no
 // Capacitor, no OkHttp, no Android) so it's testable with a fake Transport
 // and an injectable clock under plain JUnit; the real OkHttp wiring lives
@@ -173,6 +172,12 @@ public final class SocketHub {
 
   public synchronized SocketSnapshot open(String url) {
     if (url == null || url.isEmpty()) throw new HubException("url is required");
+    try {
+      java.net.URI uri = new java.net.URI(url);
+      if (!"wss".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null || uri.getUserInfo() != null) {
+        throw new HubException("relay URL must use wss://", "invalid-url");
+      }
+    } catch (java.net.URISyntaxException e) { throw new HubException("invalid relay URL", "invalid-url"); }
     expireOrphansLocked();
     for (RelaySocket rs : sockets.values()) {
       if (rs.orphan && rs.state == RelaySocket.OPEN && url.equals(rs.url)) {
@@ -188,7 +193,12 @@ public final class SocketHub {
     Transport transport = transportFactory.create();
     rs.transport = transport;
     sockets.put(id, rs);
-    transport.open(url, listenerFor(rs));
+    try { transport.open(url, listenerFor(rs)); }
+    catch (RuntimeException e) {
+      sockets.remove(id);
+      try { transport.close(1000, "open failed"); } catch (RuntimeException ignored) { }
+      throw new HubException("could not open relay", "open-failed");
+    }
     return snapshot(rs);
   }
 
@@ -598,7 +608,7 @@ public final class SocketHub {
         // The end-marker itself is never delivered to JS. Its EOSE means
         // every stale frame for the CLOSEd ids has now arrived (relays
         // answer in order): quarantine lifts.
-        if ("EOSE".equals(frame[0])) liftQuarantineLocked(rs);
+        if ("EOSE".equals(frame[0]) || "CLOSED".equals(frame[0])) liftQuarantineLocked(rs);
         log("dropping quarantine sentinel frame on socket " + rs.id);
         return;
       }

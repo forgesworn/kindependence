@@ -457,6 +457,8 @@ function notifyForPhase(circle: Circle, record: { childPk: string; collectorPk?:
  *  receipt. No-op if there's no signed-in identity or the circle is gone
  *  (nothing to send — mirrors `sendFindreq`'s own guard). */
 export async function sendPickupRequestSignal(circleId: string, childPk: string, at: number): Promise<void> {
+  const deliverySession = currentSession()
+
   const p = store.load()
   const self = currentSession()
   const circle = p.circles.find((c) => c.id === circleId)
@@ -464,7 +466,7 @@ export async function sendPickupRequestSignal(circleId: string, childPk: string,
   const id = pickupRecordId('request', at, circleId)
   store.update((sp) => { sp.pickups = openPickupRecord(sp.pickups, { id, circleId, childPk, collectorPk: self.identityPk, direction: 'request', at }) })
   const wrap = await buildPickupWrap(phoneSigner(), circle, buildPickupReason('requested', { id }), childPk, at)
-  await beacons.publishOrEnqueue(appRelays(p), wrap)
+  await beacons.publishOrEnqueue(appRelays(p), wrap, { session: deliverySession, circle })
 }
 
 /** A guardian's "offer a pickup" (new, task contract) — announces
@@ -472,6 +474,8 @@ export async function sendPickupRequestSignal(circleId: string, childPk: string,
  *  immediately. Guardian-gating is safety.ts's job (`offerPickup`), same
  *  split as `requestPickup`/`sendFindreq`. */
 export async function sendPickupOffer(circleId: string, childPk: string): Promise<void> {
+  const deliverySession = currentSession()
+
   const p = store.load()
   const self = currentSession()
   const circle = p.circles.find((c) => c.id === circleId)
@@ -481,7 +485,7 @@ export async function sendPickupOffer(circleId: string, childPk: string): Promis
   store.update((sp) => { sp.pickups = openPickupRecord(sp.pickups, { id, circleId, childPk, collectorPk: self.identityPk, direction: 'offer', at }) })
   recordPhaseActivity(id, circleId, childPk, self.identityPk, 'offered', at)
   const wrap = await buildPickupWrap(phoneSigner(), circle, buildPickupReason('offered', { id }), childPk, at)
-  await beacons.publishOrEnqueue(appRelays(p), wrap)
+  await beacons.publishOrEnqueue(appRelays(p), wrap, { session: deliverySession, circle })
 }
 
 /** Every phase transition AFTER creation (seen/accepted/on-way/collected/
@@ -499,6 +503,8 @@ async function sendPhaseTransition(
   selfPk: string, record: PickupRecord, phase: PickupPhase, at: number,
   extra?: { etaMin?: number; suggest?: PickupSuggestion },
 ): Promise<void> {
+  const deliverySession = currentSession()
+
   const p = store.load()
   const circle = p.circles.find((c) => c.id === record.circleId)
   if (!circle) return
@@ -521,7 +527,7 @@ async function sendPhaseTransition(
   if (extra?.etaMin !== undefined) wireExtra.etaMin = extra.etaMin
   if (extra?.suggest) wireExtra.suggest = extra.suggest
   const wrap = await buildPickupWrap(phoneSigner(), circle, buildPickupReason(phase, wireExtra), target, at)
-  await beacons.publishOrEnqueue(appRelays(p), wrap)
+  await beacons.publishOrEnqueue(appRelays(p), wrap, { session: deliverySession, circle })
 }
 
 /** Called from app.ts's render() on every pass (cheap: filters `p.pickups`,
@@ -609,7 +615,10 @@ export function handleIncomingPickupSignal(circle: Circle, senderPk: string, tar
   if (!self) return
   const recordId = typeof parsed.extra?.id === 'string' ? (parsed.extra.id as string) : undefined
   if (!recordId) return
+  if (!Number.isFinite(at) || at > nowSec() + 600) return
   const existing = p.pickups.find((r) => r.id === recordId)
+  if (existing && existing.circleId !== circle.id) return
+  if (!circle.members.some(m => m.pk === senderPk)) return
   let childPk: string
   let collectorPk: string
   let direction: 'request' | 'offer'
@@ -633,6 +642,18 @@ export function handleIncomingPickupSignal(circle: Circle, senderPk: string, tar
   } else {
     return
   }
+  if (!circle.members.some(m => m.pk === childPk && m.role === 'child')) return
+  if (!circle.members.some(m => m.pk === collectorPk && m.role === 'guardian')) return
+  if (parsed.phase === 'seen') {
+    const expected = direction === 'request' ? collectorPk : childPk
+    if (senderPk !== expected) return
+  } else if (existing) {
+    const action = parsed.phase === 'accepted' ? 'accept' : parsed.phase === 'declined' ? 'decline'
+      : parsed.phase === 'suggested' ? 'suggest' : parsed.phase === 'on-way' ? 'on-way'
+      : parsed.phase === 'collected' ? 'collected' : undefined
+    const role = senderPk === childPk ? 'child' : 'guardian'
+    if (!action || !actionsFor(existing, senderPk, role).includes(action)) return
+  } else if (senderPk !== collectorPk) return
   const etaMin = typeof parsed.extra?.etaMin === 'number' ? (parsed.extra.etaMin as number) : undefined
   const suggest = isPickupSuggestion(parsed.extra?.suggest) ? (parsed.extra.suggest as PickupSuggestion) : undefined
   const signal: PickupSignal = { id: recordId, circleId: circle.id, childPk, collectorPk, phase: parsed.phase, at, direction, etaMin, suggest }

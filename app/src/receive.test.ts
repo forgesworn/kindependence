@@ -611,11 +611,37 @@ describe('re-key to phone keys', () => {
     await queue.drain()
     const tags = vi.mocked(publishSigned).mock.calls.map((c) => (c[1] as unknown as SignedEvent).tags.find((t) => t[0] === 'p')?.[1])
     for (const phone of [A2, B1, D1, E1]) expect(tags).toContain(personalInboxTag(phone.pk))
-    expect(tags).not.toContain(personalInboxTag(C1.pk))
     expect(tags).toContain(personalInboxTag(A1.pk)) // this phone too: a restart inside the window still receives it
     await vi.advanceTimersByTimeAsync(REKEY_WINDOW_MS)
+    await vi.waitFor(() => expect(vi.mocked(publishSigned).mock.calls.some(c => c[1].tags.some(t => t[0] === 'p' && t[1] === personalInboxTag(C1.pk)))).toBe(true))
+    const notice = vi.mocked(publishSigned).mock.calls.map(c => c[1]).find(e => e.tags.some(t => t[0] === 'p' && t[1] === personalInboxTag(C1.pk)))
+    expect(notice).toBeDefined()
+    const removedSigner = makeLocalSigner(C1.sk)
+    const removedRumor = await giftUnwrap((pk, ct) => removedSigner.nip44Decrypt(pk, ct), notice!)
+    expect(removedRumor?.tags).toContainEqual(['t', 'kindependence-removed'])
+    expect(JSON.parse(removedRumor!.content).seed).toBeUndefined()
+
     expect(circle('c1').seedHex).not.toBe(SEED)
     expect(circle('c1').members.map((m) => m.pk)).not.toContain(C.pk)
+  })
+
+  it('a seedless removal pauses sharing without stranding a later winning rekey', async () => {
+    const H = seedHash(SEED)
+    const decision = await struct(B, 'rekey', 'c1', H, rekeyPayload(hex('4'), H, [C.pk]))
+    const notice = await giftWrap(makeLocalSigner(B1.sk), C1.pk, { kind: 20_078, tags: [['t', 'kindependence-removed']], content: JSON.stringify({ struct: decision }) }, personalInboxTag(C1.pk))
+    sessionForTests({ identityPk: C.pk, phoneSkHex: C1.sk })
+    await onPhoneInboxWrap(notice)
+    expect(store.load().settings.removalNotices?.some(n => n.circleId === 'c1')).toBe(true)
+    expect(circle('c1').seedHex).toBe(SEED)
+    const including = await struct(A, 'rekey', 'c1', H, rekeyPayload(hex('5'), H))
+    await onPhoneInboxWrap(await phoneWrap(A1, C1, including))
+    await vi.advanceTimersByTimeAsync(REKEY_WINDOW_MS)
+    expect(circle('c1').seedHex).toBe(hex('5'))
+    expect(store.load().settings.removalNotices?.some(n => n.circleId === 'c1')).toBe(false)
+    // A cold-start replay must not reapply an older, superseded notice.
+    const replay = await giftWrap(makeLocalSigner(B1.sk), C1.pk, { kind: 20_078, tags: [['t', 'kindependence-removed']], content: JSON.stringify({ struct: decision }), created_at: decision.created_at + 1 }, personalInboxTag(C1.pk))
+    await onPhoneInboxWrap(replay)
+    expect(store.load().settings.removalNotices?.some(n => n.circleId === 'c1')).toBe(false)
   })
 
   it('sendRekey carries the cumulative, sorted removal set (tombstones plus the new removals)', async () => {
@@ -1500,15 +1526,25 @@ describe('final fix A1 (critical): a removed guardian cannot undo its own remova
 describe('final fix A9: traffic resolves only to members on the current roster', () => {
   const H = seedHash(SEED)
 
-  it('a config that drops a member forgets its phone bindings, and its traffic is no longer dispatched', async () => {
+  it('does not resurrect a member from an older config after their signed self-leave', async () => {
+    const members = circle('c1').members
+    const leaving = { v: 2, createdBy: A.pk, vouches: [] as SignedEvent[], id: 'c1', name: 'Circle c1', updatedAt: nowSec(), by: E.pk, members: members.filter(m => m.pk !== E.pk) }
+    await deliver(await circleWrap(E1, circle('c1'), 'struct', JSON.stringify(await struct(E, 'config', 'c1', H, JSON.stringify(leaving), nowSec()))))
+    expect(circle('c1').members.some(m => m.pk === E.pk)).toBe(false)
+    const old = { ...leaving, by: B.pk, updatedAt: nowSec() - 1, members }
+    await deliver(await circleWrap(B1, circle('c1'), 'struct', JSON.stringify(await struct(B, 'config', 'c1', H, JSON.stringify(old), nowSec() - 1))))
+    expect(circle('c1').members.some(m => m.pk === E.pk)).toBe(false)
+  })
+
+  it('a stale roster snapshot cannot remove another member or their phone binding', async () => {
     const cfg = { v: 2, createdBy: A.pk, vouches: [] as SignedEvent[], id: 'c1', name: 'Circle c1', updatedAt: 999_999, by: B.pk, members: circle('c1').members.filter((m) => m.pk !== E.pk) }
     await deliver(await circleWrap(B1, circle('c1'), 'struct', JSON.stringify(await struct(B, 'config', 'c1', H, JSON.stringify(cfg)))))
-    expect(circle('c1').members.map((m) => m.pk)).not.toContain(E.pk)
-    expect(store.load().phoneKeys.c1?.[E1.pk]).toBeUndefined()
-    expect(memberForPhone('c1', E1.pk)).toBeNull()
+    expect(circle('c1').members.map((m) => m.pk)).toContain(E.pk)
+    expect(store.load().phoneKeys.c1?.[E1.pk]).toBeDefined()
+    expect(memberForPhone('c1', E1.pk)).toBe(E.pk)
     received.length = 0
     await deliver(await circleWrap(E1, circle('c1'), 'x-test', 'hi'))
-    expect(received).toHaveLength(0)
+    expect(received).toHaveLength(1)
   })
 
   it('memberForPhone returns null for a binding whose member is not on the roster', async () => {
@@ -1746,7 +1782,7 @@ describe('final fix round 2, R1: a self re-invite cannot open a roster takeover 
     expect(circle('c1').members.map((m) => m.pk)).toContain(E.pk)
     const near = { ...far, updatedAt: nowSec() + 500 }
     await deliver(await circleWrap(B1, circle('c1'), 'struct', JSON.stringify(await struct(B, 'config', 'c1', H, JSON.stringify(near)))))
-    expect(circle('c1').members.map((m) => m.pk)).not.toContain(E.pk)
+    expect(circle('c1').configUpdatedAt).toBe(near.updatedAt)
   })
 })
 

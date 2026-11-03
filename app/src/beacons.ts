@@ -38,7 +38,7 @@ import { structuralAuthorised, parseConfigV2 } from './authority.js'
 import * as activity from './activity.js'
 import * as mapinfo from './mapinfo.js'
 import * as poolHealth from './pool-health.js'
-import { watchLocation, type Fix } from './geo.js'
+import { watchLocation, currentPosition, type Fix } from './geo.js'
 import { deriveInbox, toHex, isGuardian } from '@forgesworn/covey-kit'
 import type { Circle } from '@forgesworn/covey-kit'
 import {
@@ -47,9 +47,8 @@ import {
   rawNip44Decrypt,
   publishSigned,
   subscribeGiftWraps,
-  createOutbox,
 } from '@forgesworn/roost-kit'
-import type { OutboxItem, OutboxStore, Rumor, SignedEvent, Signer } from '@forgesworn/roost-kit'
+import type { OutboxItem, Rumor, SignedEvent, Signer } from '@forgesworn/roost-kit'
 import { mergePrecision } from './brood/index.js'
 import type { Agreement } from './brood/index.js'
 import { decideEmission } from '@forgesworn/flock/policy'
@@ -692,7 +691,9 @@ export function mergeMemberPositions(
         continue
       }
       if (!existing.circleIds.includes(circle.id)) existing.circleIds.push(circle.id)
-      if (pos.precision > existing.pos.precision || (pos.precision === existing.pos.precision && pos.at > existing.pos.at)) {
+      const fresh = nowSec() - pos.at <= 900
+      const existingFresh = nowSec() - existing.pos.at <= 900
+      if ((fresh && !existingFresh) || (fresh === existingFresh && (pos.precision > existing.pos.precision || (pos.precision === existing.pos.precision && pos.at > existing.pos.at)))) {
         existing.pos = pos
       }
     }
@@ -713,6 +714,7 @@ export function mergeMemberPositions(
  *  timestamps compared are the sealed payload's own (`MemberPosition.at`),
  *  which a replayer can't advance. */
 export function upsertPosition(circleId: string, pubkey: string, pos: MemberPosition): void {
+  if (!Number.isFinite(pos.at) || pos.at > nowSec() + 600) return
   let byMember = positions.get(circleId)
   if (!byMember) { byMember = new Map(); positions.set(circleId, byMember) }
   const held = byMember.get(pubkey)
@@ -744,6 +746,23 @@ export function selfFix(): Fix | null {
   return currentFix
 }
 
+export const MAX_FIX_AGE_SEC = 90
+let confirmingFix: Promise<Fix | null> | null = null
+
+/** A distance-filtered watcher may be silent on a stationary phone. Ask the
+ * sensor again before publishing an old reading as a new beacon. */
+export function freshFix(): Promise<Fix | null> {
+  const now = nowSec()
+  if (currentFix && now - currentFix.at <= MAX_FIX_AGE_SEC && currentFix.at <= now + 10) return Promise.resolve(currentFix)
+  if (confirmingFix) return confirmingFix
+  confirmingFix = currentPosition({ enableHighAccuracy: false, maximumAge: 0, timeoutMs: 8000 }).then(fix => {
+    if (!fix || nowSec() - fix.at > MAX_FIX_AGE_SEC || fix.at > nowSec() + 10) return null
+    applyFix(fix)
+    return fix
+  }).finally(() => { confirmingFix = null })
+  return confirmingFix
+}
+
 /** The shared "a fresh fix arrived" handler — used both by the foreground
  *  watch below and by `feedFix` (Task 9), the seam native-geo.ts's background
  *  watcher feeds into while the app is backgrounded. Same effect either way:
@@ -751,6 +770,7 @@ export function selfFix(): Fix | null {
  *  gap) bring every live circle's emit timer forward to now rather than
  *  waiting out whatever cadence tick was already scheduled. */
 function applyFix(fix: Fix): void {
+  if (!Number.isFinite(fix.at) || fix.at > nowSec() + 600 || (currentFix && fix.at < currentFix.at)) return
   const hadFix = currentFix !== null
   const now = nowSec()
   // Quiescence-aware "as of right now" mode, read BEFORE this fix touches
@@ -813,74 +833,149 @@ export function feedFix(fix: Fix): void {
 
 const OUTBOX_KEY = 'kindependence.beacons.outbox.v1'
 
-function localStorageOutboxStore(key: string): OutboxStore {
-  return {
-    load(): OutboxItem[] {
-      try {
-        const raw = localStorage.getItem(key)
-        if (!raw) return []
-        const parsed: unknown = JSON.parse(raw)
-        return Array.isArray(parsed) ? (parsed as OutboxItem[]) : []
-      } catch {
-        return []
-      }
-    },
-    save(items: OutboxItem[]): void {
-      try { localStorage.setItem(key, JSON.stringify(items)) } catch { /* quota / private-mode — drop silently */ }
-    },
-  }
+export type Delivery = 'sent' | 'queued' | 'failed'
+export interface SendOptions {
+  session?: ReturnType<typeof currentSession>
+  circle?: Circle
+  personal?: boolean
+  routinePrecision?: number
+  observedAt?: number
+  recipientPhonePk?: string
+  breach?: { circleId: string; placeName: string; at: number; selfPk: string; episodeId: string }
+  priority?: 'help' | 'routine'
+  circleId?: string
+  help?: { memberPk: string; at?: number; location: import('canary-kit').DuressLocation | null }
+}
+interface PendingSend extends OutboxItem, SendOptions { owner?: string; inbox?: string }
+let pending: PendingSend[] | null = null
+let pendingStorage: Storage | null = null
+let retryTimer: ReturnType<typeof setTimeout> | null = null
+let onlineFlushWired = false
+let outboxGeneration = 0
+
+function queue(): PendingSend[] {
+  if (pending && pendingStorage === localStorage) return pending
+  pendingStorage = localStorage
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem(OUTBOX_KEY) ?? '[]')
+    pending = Array.isArray(raw) ? raw.filter(i => i && typeof i.event?.id === 'string' && Array.isArray(i.event.tags) && Array.isArray(i.relays)) : []
+  } catch { pending = [] }
+  return pending!
 }
 
-let outbox: ReturnType<typeof createOutbox> | null = null
-let onlineFlushWired = false
+function persistQueue(): boolean {
+  try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(queue())); return true }
+  catch { return false }
+}
 
-function ensureOutbox(): ReturnType<typeof createOutbox> {
-  outbox ??= createOutbox(localStorageOutboxStore(OUTBOX_KEY))
-  return outbox
+function retryLater(): void {
+  if (retryTimer || !currentSession() || !queue().length) return
+  retryTimer = setTimeout(() => { retryTimer = null; void flushOutbox() }, 15_000)
+}
+
+/** Sign-out invalidates both queued work and any flush awaiting a relay. */
+export function hasQueuedBreach(circleId: string, placeName: string): boolean {
+  return queue().some(i => i.breach?.circleId === circleId && i.breach.placeName === placeName)
+}
+
+export function clearQueuedBreaches(circleId: string): void {
+  const items = queue()
+  if (!items.some(i => i.breach?.circleId === circleId)) return
+  pending = items.filter(i => i.breach?.circleId !== circleId)
+  persistQueue()
+}
+
+export function clearOutbox(): void {
+  outboxGeneration++
+  pending = []
+  pendingStorage = localStorage
+  if (retryTimer) clearTimeout(retryTimer)
+  retryTimer = null
+  try { localStorage.removeItem(OUTBOX_KEY) } catch { /* memory is cleared too */ }
+}
+
+function routineDisclosureAllowed(options: SendOptions): boolean {
+  if (options.observedAt !== undefined && nowSec() - options.observedAt > MAX_FIX_AGE_SEC) return false
+  const id = options.circle?.id ?? options.circleId
+  if (options.routinePrecision === undefined || !id) return true
+  const p = store.load()
+  const baseline = applyJourneyFloor(circleBaselinePrecision(p.settings, id, liveLocalDay()), journeyFloorFor(id))
+  const allowed = decideCadence(basePrecisionFor(currentFix, baseline), activeAgreementFor(id), nowSec(), movementModeAt(movement, currentFix?.at ?? null, nowSec())).precision
+  return options.routinePrecision <= allowed
 }
 
 type FlushResult = { sent: number; dropped: number; remaining: number }
-
 let flushing: Promise<FlushResult> | null = null
-let flushAgain = false
 
-/** Retry every queued beacon; drops any that expired first. Safe to call any
- *  time (empty queue is a no-op).
- *
- *  Final review, item 3: serialised. Two roost-kit `flush`es running at
- *  once each snapshot the queue and write it back when done, so the later
- *  one can drop an item enqueued meanwhile (and both send the same items).
- *  One flush is in flight at a time; a request while it runs makes it run
- *  exactly once more afterwards, and every caller gets the last run's
- *  result. */
 export function flushOutbox(): Promise<FlushResult> {
-  if (flushing) {
-    flushAgain = true
-    return flushing
-  }
-  flushAgain = false
-  const run = (async (): Promise<FlushResult> => {
-    await null // `flushing` is assigned before the `finally` can clear it
+  if (flushing) return flushing
+  flushing = (async () => {
+    await null
+    let sent = 0
+    let dropped = 0
+    const generation = outboxGeneration
     try {
-      for (;;) {
-        const result = await ensureOutbox().flush((relays, event) => publish(relays, event), nowSec())
-        if (!flushAgain) return result
-        flushAgain = false
+      {
+        const attempted = new Set<string>()
+        const self = currentSession()
+        if (!self) return { sent, dropped, remaining: queue().length }
+        for (;;) {
+          const item = queue().filter(i => !attempted.has(i.event.id)).sort((a, b) => Number(b.priority === 'help') - Number(a.priority === 'help'))[0]
+          if (!item) break
+          attempted.add(item.event.id)
+          if (generation !== outboxGeneration || currentSession() !== self) break
+          const circle = item.circleId ? store.load().circles.find(c => c.id === item.circleId) : undefined
+          const target = item.event.tags.find(t => t[0] === 'p')?.[1]
+          const currentInboxes = store.load().circles.map(c => deriveInbox(c.seedHex).pk)
+          const expired = (item.expiresAt !== undefined && item.expiresAt <= nowSec()) || (item.priority === 'routine' && nowSec() - item.queuedAt > 90)
+          // Legacy queue items can only be recovered when addressed to a
+          // current circle. Never replay another session's personal wraps.
+          const wrongOwner = (item.owner ? item.owner !== self.identityPk : !currentInboxes.includes(target ?? '')) || !!store.load().revokedPhoneKeys[item.recipientPhonePk ?? target ?? ''] || !!store.load().settings.removalNotices?.some(n => n.circleId === item.circleId)
+          const changed = item.circleId && !item.personal && (!circle || deriveInbox(circle.seedHex).pk !== item.inbox)
+          if (expired || wrongOwner || !routineDisclosureAllowed(item) || (changed && (!item.help || !circle))) {
+            pending = queue().filter(i => i.event.id !== item.event.id); dropped++; persistQueue(); continue
+          }
+          try {
+            let event = item.event
+            if (changed && item.help && circle) {
+              const { buildHelpWrap } = await import('./safety.js')
+              event = await buildHelpWrap(phoneSigner(), circle, item.help.memberPk, nowSec() - item.queuedAt <= 90 ? item.help.location : null, item.help.at ?? item.queuedAt)
+            }
+            if (generation !== outboxGeneration || currentSession() !== self) break
+            if (item.circleId && !item.personal) {
+              const latest = store.load()
+              const current = latest.circles.find(c => c.id === item.circleId)
+              if (!current || event.tags.find(t => t[0] === 'p')?.[1] !== deriveInbox(current.seedHex).pk || latest.settings.removalNotices?.some(n => n.circleId === item.circleId)) continue
+            }
+            if (!routineDisclosureAllowed(item)) continue
+            await publish(item.relays, event)
+            poolHealth.notePoolActivity()
+            if (generation !== outboxGeneration || currentSession() !== self) break
+            const stillQueued = queue().some(i => i.event.id === item.event.id)
+            pending = queue().filter(i => i.event.id !== item.event.id)
+            sent++
+            persistQueue()
+            store.update(p => { for (const evt of p.safetyEvents) if (evt.wrapId === item.event.id) evt.delivery = 'sent' })
+            if (item.breach && stillQueued) {
+              const { confirmBreachDelivery } = await import('./places.js')
+              confirmBreachDelivery(item.breach)
+            }
+          } catch { /* retain for the next retry; continue to other alerts */ }
+        }
       }
-    } finally {
-      flushing = null
-    }
+      return { sent, dropped, remaining: queue().length }
+    } finally { flushing = null; retryLater(); store.notify() }
   })()
-  flushing = run
-  return run
+  return flushing
 }
 
 function ensureOutboxFlush(): void {
-  ensureOutbox()
-  if (onlineFlushWired) return
-  onlineFlushWired = true
-  if (typeof window !== 'undefined') window.addEventListener('online', () => { void flushOutbox() })
-  void flushOutbox() // app start
+  if (!onlineFlushWired) {
+    onlineFlushWired = true
+    if (typeof window !== 'undefined') window.addEventListener('online', () => { void flushOutbox() })
+    void flushOutbox()
+  }
+  retryLater()
 }
 
 // ---------------------------------------------------------------------------
@@ -921,18 +1016,46 @@ export async function buildBeaconWrap(signer: Signer, circle: Circle, fix: Fix, 
  *  place for this, rather than repeating the call at each of those call
  *  sites. A failed publish (falls to the outbox below) proves nothing about
  *  the pool being alive, so it deliberately does NOT note activity. */
-export async function publishOrEnqueue(relays: readonly string[], signed: SignedEvent): Promise<void> {
+export async function publishOrEnqueue(relays: readonly string[], signed: SignedEvent, options: SendOptions = {}): Promise<Delivery> {
+  const self = currentSession()
+  if (!self || (options.session !== undefined && options.session !== self)) return 'failed'
+  const generation = outboxGeneration
+  const target = signed.tags.find(t => t[0] === 'p')?.[1]
+  const circle = store.load().circles.find(c => deriveInbox(c.seedHex).pk === target)
+  const expected = options.circle
+  if (!routineDisclosureAllowed(options)) return 'failed'
+  if (!expected && !circle && !options.personal && !options.circleId) return 'failed'
+  const circleId = expected?.id ?? options.circleId ?? circle?.id
+  if (expected) {
+    const live = store.load().circles.find(c => c.id === expected.id)
+    if (!live || live.seedHex !== expected.seedHex || target !== deriveInbox(live.seedHex).pk) return 'failed'
+  }
+  if (store.load().revokedPhoneKeys[options.recipientPhonePk ?? target ?? '']) return 'failed'
+  if (circleId && store.load().settings.removalNotices?.some(n => n.circleId === circleId)) return 'failed'
+  // Persist only data needed to retry, never a live session or signer.
+  const { session: _session, circle: _circle, ...persistedOptions } = options
+  const binding: SendOptions = { ...persistedOptions, ...(circleId ? { circleId } : {}) }
   try {
     await publish(relays, signed)
     poolHealth.notePoolActivity()
+    return 'sent'
   } catch {
-    ensureOutbox().enqueue(signed, relays, nowSec())
+    if (generation !== outboxGeneration || currentSession() !== self) return 'failed'
+    const items = queue()
+    const expiresAt = Number(signed.tags.find(t => t[0] === 'expiration')?.[1]) || undefined
+    if (binding.priority === 'routine') pending = items.filter(i => !(i.priority === 'routine' && i.circleId === binding.circleId))
+    queue().push({ event: signed, relays, queuedAt: nowSec(), expiresAt, ...binding, owner: self?.identityPk, inbox: target })
+    const saved = persistQueue()
+    retryLater()
+    return saved ? 'queued' : 'failed'
   }
 }
 
 async function emitBeacon(relays: string[], signer: Signer, circle: Circle, fix: Fix, precision: number): Promise<void> {
+  const deliverySession = currentSession()
+
   const wrap = await buildBeaconWrap(signer, circle, fix, precision)
-  await publishOrEnqueue(relays, wrap)
+  await publishOrEnqueue(relays, wrap, { priority: 'routine', routinePrecision: precision, observedAt: fix.at, circleId: circle.id, session: deliverySession, circle })
 }
 
 const emitTimers = new Map<string, ReturnType<typeof setTimeout>>()
@@ -984,10 +1107,15 @@ async function emitTick(circleId: string): Promise<void> {
     })
   }
 
-  if (currentFix && precision > 0) {
-    void emitBeacon(appRelays(p), phoneSigner(), circle, currentFix, precision)
+  const fix = precision > 0 ? await freshFix() : null
+  const live = store.load().circles.find(c => c.id === circleId && !store.load().settings.removalNotices?.some(n => n.circleId === c.id))
+  if (fix && live?.seedHex === circle.seedHex && currentSession() === self) {
+    const latest = store.load()
+    const latestBaseline = applyJourneyFloor(circleBaselinePrecision(latest.settings, circleId, liveLocalDay()), journeyFloorFor(circleId))
+    const latestPrecision = decideCadence(basePrecisionFor(fix, latestBaseline), activeAgreementFor(circleId), nowSec(), movementModeAt(movement, fix.at, nowSec())).precision
+    if (latestPrecision > 0) await emitBeacon(appRelays(latest), phoneSigner(), live, fix, latestPrecision)
   }
-  scheduleEmit(circleId, intervalMs)
+  if (currentSession() === self && live) scheduleEmit(circleId, intervalMs)
 }
 
 // ---------------------------------------------------------------------------
@@ -1017,6 +1145,7 @@ export async function decodeBeaconRumor(rumor: Rumor, circleSeedHex: string): Pr
   if (t !== SIGNAL_TYPES.beacon) return null
   try {
     const payload = await decryptBeacon(deriveBeaconKey(circleSeedHex), rumor.content)
+    if (!Number.isFinite(payload.timestamp) || payload.timestamp > nowSec() + 600) return null
     return { geohash: payload.geohash, precision: payload.precision, at: payload.timestamp }
   } catch {
     // undecryptable / malformed — silently drop, same discipline as the emit
@@ -1179,6 +1308,7 @@ export function vouchParkRejudgesForTests(): number {
  *  persisted structural log lives in the store). */
 export function resetReceiveForTests(): void {
   seenRumorIds.clear()
+  unboundSafety.clear()
   parkedStructural.clear()
   vouchParked.clear()
   linkHeld.clear()
@@ -1202,6 +1332,7 @@ function parseJson(s: string): unknown {
   try { return JSON.parse(s) } catch { return null }
 }
 
+const unboundSafety = new Map<string, Rumor[]>()
 type Outcome = 'done' | 'parked'
 
 /**
@@ -1268,7 +1399,15 @@ async function handleCircleRumor(circleId: string, rumor: Rumor): Promise<Outcom
   if (self && rumor.pubkey === self.phonePk) return 'done'
   if (t === STRUCT_SIGNAL_TYPE) return receiveStructural(circle, rumor, now)
   const memberPk = memberForPhone(circle.id, rumor.pubkey)
-  if (!memberPk) return 'done'
+  if (!memberPk) {
+    if (t === SIGNAL_TYPES.help || t === 'buzz') {
+      const held = unboundSafety.get(circleId) ?? []
+      if (!held.some(r => r.id === rumor.id)) held.push(rumor)
+      unboundSafety.set(circleId, held.slice(-100))
+      return 'parked'
+    }
+    return 'done'
+  }
   if (STRUCTURAL_ACTIONS.has(t)) return 'done' // a phone key may never perform a structural action
   touch(circle.id, rumor.pubkey, now)
   if (t === VOUCH_POST_SIGNAL_TYPE) {
@@ -1293,6 +1432,11 @@ async function handleCircleRumor(circleId: string, rumor: Rumor): Promise<Outcom
  *  accepted, a roster change rescanned, a re-key applied): re-runs the
  *  structural events and re-keys parked for that circle. */
 export function onPhonesBound(circleId: string): void {
+  const safety = unboundSafety.get(circleId) ?? []
+  unboundSafety.delete(circleId)
+  for (const rumor of safety) void handleCircleRumor(circleId, rumor).then(outcome => {
+    if (outcome !== 'parked' && rumor.id) markRumorSeen(`${circleId}:${rumor.id}`)
+  })
   const list = parkedStructural.get(circleId)
   if (list?.length) {
     parkedStructural.delete(circleId)
@@ -1539,33 +1683,45 @@ export async function applyParkedRevocations(): Promise<void> {
  *  seed (a re-key since signing is fine: receivers accept any seed hash the
  *  circle has had, except for re-keys, which never travel here). */
 export async function sendStructural(circle: Circle, signed: SignedEvent): Promise<void> {
+  const self = currentSession()
+  if (!self) throw new Error('not signed in')
   const p = store.load()
-  const current = p.circles.find((c) => c.id === circle.id) ?? circle
+  const current = p.circles.find(c => c.id === circle.id)
+  if (!current) throw new Error('circle no longer available')
   const inbox = deriveInbox(current.seedHex)
   const wrap = await giftWrap(phoneSigner(), inbox.pk, { kind: KINDS.signal, tags: [['t', STRUCT_SIGNAL_TYPE]], content: JSON.stringify(signed) }, inbox.pk)
-  await publishOrEnqueue(appRelays(p), wrap)
+  const latest = store.load()
+  if (currentSession() !== self || latest.circles.find(c => c.id === circle.id)?.seedHex !== current.seedHex || latest.settings.removalNotices?.some(n => n.circleId === circle.id)) throw new Error('sharing changed before send')
+  // The structural queue owns persistence and re-wrapping. Keep its item
+  // until a relay accepts this wrap, including after key rotation.
+  await publish(appRelays(latest), wrap)
+  poolHealth.notePoolActivity()
 }
 
 /** Plan 2, Task 6: posts a signed vouch (the `invite` naming its invitee)
  *  into `circle` as a phone-sealed `t:'vouch-post'` rumor, so members hold
  *  it before the config adding the invitee arrives. */
 export async function postVouch(circle: Circle, signed: SignedEvent): Promise<void> {
+  const deliverySession = currentSession()
+
   const p = store.load()
   const current = p.circles.find((c) => c.id === circle.id) ?? circle
   const inbox = deriveInbox(current.seedHex)
   const wrap = await giftWrap(phoneSigner(), inbox.pk, { kind: KINDS.signal, tags: [['t', VOUCH_POST_SIGNAL_TYPE]], content: JSON.stringify(signed) }, inbox.pk)
-  await publishOrEnqueue(appRelays(p), wrap)
+  await publishOrEnqueue(appRelays(p), wrap, { session: deliverySession, circle: current })
 }
 
 /** Plan 2, Task 7: posts guardian-link statements into `circle` as a
  *  phone-sealed `t:'link'` rumor — a `{ g, d }` pair or an `{ unlink }` —
  *  so members learn the link (`receiveLink`). */
 export async function postLink(circle: Circle, content: { g: SignedEvent; d: SignedEvent } | { unlink: SignedEvent }): Promise<void> {
+  const deliverySession = currentSession()
+
   const p = store.load()
   const current = p.circles.find((c) => c.id === circle.id) ?? circle
   const inbox = deriveInbox(current.seedHex)
   const wrap = await giftWrap(phoneSigner(), inbox.pk, { kind: KINDS.signal, tags: [['t', LINK_SIGNAL_TYPE]], content: JSON.stringify(content) }, inbox.pk)
-  await publishOrEnqueue(appRelays(p), wrap)
+  await publishOrEnqueue(appRelays(p), wrap, { session: deliverySession, circle: current })
 }
 
 /** Posts this device's own device statement into `circle` (on join, after
@@ -1573,6 +1729,8 @@ export async function postLink(circle: Circle, content: { g: SignedEvent; d: Sig
  *  table, and records when (`statementPostedAt`). A no-op until the session
  *  holds a signed statement. */
 export async function postStatement(circle: Circle): Promise<void> {
+  const deliverySession = currentSession()
+
   const self = currentSession()
   if (!self?.statement) return
   const p = store.load()
@@ -1581,7 +1739,7 @@ export async function postStatement(circle: Circle): Promise<void> {
   store.update((sp) => { sp.statementPostedAt = { ...sp.statementPostedAt, [current.id]: Date.now() } })
   const inbox = deriveInbox(current.seedHex)
   const wrap = await giftWrap(phoneSigner(), inbox.pk, { kind: KINDS.signal, tags: [['t', DEVICE_SIGNAL_TYPE]], content: JSON.stringify(self.statement) }, inbox.pk)
-  await publishOrEnqueue(appRelays(p), wrap)
+  await publishOrEnqueue(appRelays(p), wrap, { session: deliverySession, circle: current })
 }
 
 /** Posts a signed, identity-authorised revocation (device-statements.ts's
@@ -1594,11 +1752,13 @@ export async function postStatement(circle: Circle): Promise<void> {
  *  peer's copy arriving on the wire) is `applyRevocation`'s job, called
  *  separately by the caller once, not once per circle. */
 export async function postRevocation(circle: Circle, signed: SignedEvent): Promise<void> {
+  const deliverySession = currentSession()
+
   const p = store.load()
   const current = p.circles.find((c) => c.id === circle.id) ?? circle
   const inbox = deriveInbox(current.seedHex)
   const wrap = await giftWrap(phoneSigner(), inbox.pk, { kind: KINDS.signal, tags: [['t', REVOKE_SIGNAL_TYPE]], content: JSON.stringify(signed) }, inbox.pk)
-  await publishOrEnqueue(appRelays(p), wrap)
+  await publishOrEnqueue(appRelays(p), wrap, { session: deliverySession, circle: current })
 }
 
 /** How often app start re-posts this device's statement into each circle:
@@ -1650,12 +1810,13 @@ export function ensure(p: store.Persisted): void {
   ensureGeoWatch()
   ensureOutboxFlush()
 
-  const liveIds = new Set(p.circles.map((c) => c.id))
+  const activeCircles = p.circles.filter(c => !p.settings.removalNotices?.some(n => n.circleId === c.id))
+  const liveIds = new Set(activeCircles.map((c) => c.id))
   for (const id of [...emitTimers.keys()]) if (!liveIds.has(id)) clearEmitTimer(id)
   for (const [id, unsub] of [...inboxUnsubscribes]) {
     if (!liveIds.has(id)) { unsub(); inboxUnsubscribes.delete(id); inboxKeys.delete(id) }
   }
-  for (const circle of p.circles) {
+  for (const circle of activeCircles) {
     ensureReceive(p, circle)
     if (!emitTimers.has(circle.id)) scheduleEmit(circle.id, 0) // kick off now; first tick sends immediately if a fix is already in hand
   }

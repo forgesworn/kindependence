@@ -88,9 +88,10 @@ describe('store — old pre-Task-5 identity format', () => {
   })
 
   it('leaves an ordinary v1 blob (no identity.skHex) untouched', () => {
-    localStorage.setItem('kindependence.v1', JSON.stringify({ v: 1, circles: [{ id: 'a', name: 'Keep me' }] }))
+    const circle = { id: 'a', name: 'Keep me', seedHex: '1'.repeat(64), members: [] }
+    localStorage.setItem('kindependence.v1', JSON.stringify({ v: 1, circles: [circle] }))
     const p = store.load()
-    expect(p.circles).toEqual([{ id: 'a', name: 'Keep me' }])
+    expect(p.circles).toEqual([circle])
     expect(localStorage.getItem('kindependence.v1')).not.toBeNull()
   })
 })
@@ -540,4 +541,28 @@ describe('contactsSnapshot — load() coercion (final review B, finding I2)', ()
     expect(() => store.load()).not.toThrow()
     expect(store.load().contactsSnapshot).toBeUndefined()
   })
+})
+
+
+describe('storage failures', () => {
+  it('preserves consecutive changes in memory when storage is full', () => {
+    vi.spyOn(localStorage, 'setItem').mockImplementation(() => { throw new DOMException('full', 'QuotaExceededError') })
+    store.update(p => { p.settings.relayUrl = 'wss://family.example' })
+    store.update(p => { p.settings.routingUrl = 'https://routing.example' })
+    expect(store.load().settings.relayUrl).toBe('wss://family.example')
+    expect(store.load().settings.routingUrl).toBe('https://routing.example')
+    vi.restoreAllMocks()
+  })
+})
+
+
+it('preserves a malformed circle blob before any replacement write', () => {
+  const raw = JSON.stringify({ v: 1, circles: [null] })
+  localStorage.setItem('kindependence.v1', raw)
+  expect(store.load().circles).toEqual([])
+  const at = Date.now()
+  vi.spyOn(Date, 'now').mockReturnValue(at)
+  store.update(p => { p.settings.relayUrl = 'wss://family.example' })
+  expect(localStorage.getItem(`kindependence.recovery.${at}`)).toBe(raw)
+  vi.restoreAllMocks()
 })

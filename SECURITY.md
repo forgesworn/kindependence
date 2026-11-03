@@ -1,8 +1,7 @@
 # Security reports
 
 Use GitHub's [private vulnerability reporting form](https://github.com/forgesworn/kindependence/security/advisories/new)
-for this repository. Private vulnerability reporting will be enabled when the repository is
-published. If the form is unavailable, open an issue asking
+for this repository. Private vulnerability reporting is enabled. If the form is unavailable, open an issue asking
 for a private reporting channel and include no vulnerability details.
 
 Do not put identity keys, bunker links, pairing codes, real family locations,

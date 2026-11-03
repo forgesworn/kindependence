@@ -930,3 +930,5 @@ input[type='datetime-local'] {
   border-color: var(--accent);
   font-weight: 600;
 }
+
+.shell-sos { position: fixed; right: 1rem; bottom: 5.5rem; z-index: 20; max-width: 18rem; padding: .5rem; background: var(--bg, #17110b); border-radius: .75rem; }

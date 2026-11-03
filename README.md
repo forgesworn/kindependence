@@ -86,8 +86,8 @@ signal types keep their FLOCK names underneath, but nothing user-facing does.
   complete" itself, so the circle still hears something rather than nothing;
   a meeting point or typed destination always gets that closing buzz, since
   nothing else would. Cancelling never buzzes — it's just "never mind".
-  The SOS hold button stays reachable here (and on Circles) no matter what
-  else is on screen.
+  The SOS control is also available on Activity, You and modal screens, with
+  a confirmation path for keyboard and assistive activation.
 - **Circles** — circle list and membership, invites, family policy and
   approval requests, **safe areas** (guardian-defined named places with a
   radius; a child's device evaluates arrivals/departures locally and only
@@ -166,7 +166,7 @@ signal types keep their FLOCK names underneath, but nothing user-facing does.
   a safe-area escalation, family-policy changes, and every approval
   request/response (including boundary-exit asks) are never auto-pruned by
   either rule, only ever removable by hand via **Clear routine history**'s
-  two-tap confirm — plus family policy, and Contacts (the companion-rail
+  two-tap confirm — plus family policy, and Contacts (the My Signet contacts grant
   pairing/rolodex from the guide below).
 - **Home-screen widget (Android)** — an optional widget showing up to four
   circle members at a glance (availability, place attachment at Street
@@ -279,10 +279,10 @@ upstream since Kindependence's own pins, and adopt what applies here.
   safety-critical send paths.
 - **Staying connected.** Phone data connections can go quietly stuck —
   still "connected" but nothing actually arriving, and the app has no way to
-  tell without checking. Both of Kindependence's relay connections (the main one,
-  and the companion-rail's own separate one) now notice this on their own
-  and reconnect automatically after about a minute of silence, without
-  interrupting anything already in progress.
+  tell without checking. The app checks expected inbox subscriptions when it resumes and recovers
+  stale relay connections. Background delivery depends on Android allowing
+  the app renderer to keep running; an ongoing notification is not proof
+  that beacons or SOS are reaching another phone.
 - **Wire migration.** flock's own coordination-message format tightened to a
   fixed, short list of message kinds (no free text). Kindependence's richer
   vocabulary — circle chat, journeys, pickup lifecycle, precise-location
@@ -349,7 +349,7 @@ those concerns.
 | [`forgesworn/roost-kit`](https://github.com/forgesworn/roost-kit) | Transport: signer types, NIP-59 gift wrap, relay publish/subscribe, key rotation, and an offline outbox. The wire-level foundation everything else sits on. |
 | [`forgesworn/covey-kit`](https://github.com/forgesworn/covey-kit) | Circles: keys, a local in-memory signer, personal-inbox payloads, word-code invites, roles, and latest-wins config merge. Depends on Roost. |
 | [`app/src/brood/`](app/src/brood) | The local BROOD family protocol: agreements, family policy, approvals and schedule-driven disclosure. Its [wire specification](docs/BROOD.md) and tests live here. |
-| [`app/`](app) | The Kindependence PWA (and Capacitor Android shell): onboarding/identity, circles, map, beacons, safety, safe areas, agreements, approvals, messaging, the Activity timeline, native notifications/background location, and the companion-rail contacts consumer. |
+| [`app/`](app) | The Kindependence PWA (and Capacitor Android shell): onboarding/identity, circles, map, beacons, safety, safe areas, agreements, approvals, messaging, the Activity timeline, native notifications/background location, and the My Signet contacts grant consumer. |
 
 Every package is MIT licensed, matching the root [`LICENSE`](LICENSE).
 
@@ -511,3 +511,14 @@ and locations in reports and fixtures.
 
 For security reports, see [SECURITY.md](SECURITY.md). For data storage and
 network behaviour, see [PRIVACY.md](PRIVACY.md).
+
+Distribution builds can select a tile provider with `VITE_TILE_URL` and
+`VITE_TILE_ATTRIBUTION`. The existing OpenStreetMap default remains in place;
+distributors must choose a source suitable for their distribution. No project
+proxy is used. Android is the supported native target; the browser build is a
+development preview, and there is no iPhone app or hosted web app.
+
+An SOS reports whether a relay accepted it or whether it is waiting for retry.
+Relay acceptance does not mean a guardian has read it. Exact-location requests
+are automatically answered only for guardians with a recent sensor fix. All
+circle members can read disclosures made into their shared circle inbox.
