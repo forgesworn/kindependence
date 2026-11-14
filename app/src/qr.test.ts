@@ -51,8 +51,8 @@ describe('qrDataUrl', () => {
     expect(decodeDataUrl(url)).toBe(uri)
   })
 
-  it('keeps a whole-module quiet zone of 3 by default', () => {
+  it('keeps a whole-module quiet zone of 4 by default', () => {
     const svg = decodeURIComponent(qrDataUrl('x').split(',')[1]!)
-    expect(svg).toMatch(/M3 3h/)
+    expect(svg).toMatch(/M4 4h/)
   })
 })
