@@ -13,9 +13,9 @@ import { encode, toSvg } from '@forgesworn/qr'
  *  screen, so it needs more tolerance than the minimum.
  *
  *  `margin` is the quiet zone in whole modules. The previous encoder used a
- *  16 px border at 6 px a module (about 2.7 modules); 3 is the nearest whole
- *  number, and the standard's own minimum is 4. */
-export function qrDataUrl(data: string, margin = 3): string {
+ *  16 px border at 6 px a module (about 2.7 modules); this uses the standard's
+ *  minimum of 4. */
+export function qrDataUrl(data: string, margin = 4): string {
   const svg = toSvg(encode(data, { ecc: 'M' }), { margin, dark: '#000', light: '#fff' })
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
 }
@@ -27,7 +27,7 @@ export function qrDataUrl(data: string, margin = 3): string {
  *  function safe by default for any future caller that doesn't, per
  *  global-constraints "esc() every wire-derived string in innerHTML
  *  (attribute AND text positions)". */
-export function qrImgTag(data: string, alt: string, margin = 3): string {
+export function qrImgTag(data: string, alt: string, margin = 4): string {
   return `<img class="qr" src="${qrDataUrl(data, margin)}" alt="${esc(alt)}" width="256" height="256" />`
 }
 
