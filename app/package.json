@@ -18,6 +18,7 @@
     "@capacitor/local-notifications": "^8.2.0",
     "@forgesworn/covey-kit": "git+https://github.com/forgesworn/covey-kit.git#89d537bed25226f3f555777577f4651f4f3fa4f8",
     "@forgesworn/flock": "git+https://github.com/forgesworn/flock-kit.git#eb96ce0c4e0b65cdaa42bdc4b47c81c9a92e4dae",
+    "@forgesworn/qr": "^0.1.0",
     "@forgesworn/roost-kit": "git+https://github.com/forgesworn/roost-kit.git#27d33dd671a0bf0fa24f4ab8bb813c88749852c2",
     "@forgesworn/signet-contacts": "git+https://github.com/forgesworn/signet-contacts.git#a44b28615c1633531cb201984b011ddc79448b88",
     "@noble/hashes": "^2.4.0",
@@ -26,7 +27,6 @@
     "jsqr": "^1.4.0",
     "maplibre-gl": "^6.11.2",
     "nostr-tools": "2.23.9",
-    "qrcode-generator": "^2.0.4",
     "rendezvous-kit": "^1.21.6",
     "signet-login": "file:../vendor/signet-login-0.17.3-local.tgz"
   },
