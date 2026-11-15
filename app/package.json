@@ -25,7 +25,7 @@
     "canary-kit": "^2.10.0",
     "geohash-kit": "^1.5.1",
     "jsqr": "^1.4.0",
-    "maplibre-gl": "^6.11.2",
+    "maplibre-gl": "^6.18.0",
     "nostr-tools": "2.23.9",
     "rendezvous-kit": "^1.21.6",
     "signet-login": "file:../vendor/signet-login-0.17.3-local.tgz"
