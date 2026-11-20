@@ -1,0 +1,13 @@
+# Kindependence
+
+> Consent-based family location sharing app in the Kindred suite.
+
+## Documentation
+
+- [App and protocol](https://github.com/forgesworn/kindependence/blob/main/README.md): Project scope, usage and Flock compatibility.
+
+## ForgeSworn ecosystem
+
+- [ForgeSworn library guide](https://forgesworn.dev/llms.txt): Find related libraries, tools and integration guides by task and runtime.
+- [ForgeSworn on GitHub](https://github.com/forgesworn): Browse the organisation’s public repositories.
+- [Project source](https://github.com/forgesworn/kindependence): Canonical source repository, documentation and release information.
